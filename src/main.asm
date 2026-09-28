@@ -82,6 +82,8 @@ start:
 
         ld a, 1
         out (SGM_UPPER), a      ; 24KB RAM at $2000-$7FFF
+        call sgm_present
+        jp nz, no_sgm
         ld a, $0D
         out (SGM_LOWER), a      ; 8KB RAM over the BIOS at $0000-$1FFF
         ld sp, STACK_TOP
@@ -169,6 +171,35 @@ install_vectors:
         inc hl
         ld (hl), high nmi
         ret
+
+; Is SGM RAM answering at $2000? (A stock ColecoVision has nothing there; its
+; 1KB only mirrors across $6000-$7FFF, so the probe must stay below $6000.)
+; Out: Z = present.
+sgm_present:
+        ld hl, $2000
+        ld (hl), $55
+        ld a, (hl)
+        cp $55
+        ret nz
+        ld (hl), $AA
+        ld a, (hl)
+        cp $AA
+        ret
+
+; No Super Game Module: say so and stop. Runs with the BIOS still mapped and
+; only the native 1KB of RAM (DRV_RAM mirrors onto it).
+no_sgm:
+        call vdp_init
+        ld hl, VR_PNT + 10*32 + 3
+        ld de, s_nosgm1
+        call print_vram
+        ld hl, VR_PNT + 12*32 + 9
+        ld de, s_nosgm2
+        call print_vram
+        ld a, VDP_R1_OFF | $40  ; display on, VDP interrupt still off
+        ld c, 1
+        call vdp_reg
+.halt:  jr .halt
 
 ; Probe the start and end of each SGM RAM region plus the old native-RAM window.
 ; Out: A = 1 if every probe held $55 and $AA, else 0.
@@ -455,6 +486,8 @@ s_ok:    db "OK", 0
 s_fail:  db "FAIL", 0
 s_frame: db "FRAME ", 0
 s_joy:   db "  JOY ", 0
+s_nosgm1: db "SUPER GAME MODULE REQUIRED", 0
+s_nosgm2: db "PLEASE CONNECT", 0
 
 font:   incbin "build/font.bin"
 font_len equ $-font
