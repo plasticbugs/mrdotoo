@@ -20,9 +20,10 @@ HUD_COL         equ HUD_DATA + $300
 HUD_CLS         equ HUD_DATA + $600
 HUD_MAP         equ HUD_DATA + $700
 HUD_GLYPH       equ HUD_DATA + $800
-HUD_STATIC      equ HUD_DATA + $B00
-HUD_CELLS       equ HUD_DATA + $B40
+HUD_STATIC      equ HUD_DATA + $B80
+HUD_CELLS       equ HUD_DATA + $BC0
 HUD_BASE        equ 180             ; = tools/gen_hud.py HUD_BASE
+HUD_N0          equ 256 - HUD_BASE  ; glyphs at HUD_BASE.. (then HUD_EXTRA0..)
 PLATE_CODE      equ DESSERT_BASE    ; the current dessert's 4 tiles
 
 ; DE = a cell in a HUD strip, playfield mode: its glyph into both name
@@ -180,18 +181,29 @@ hud_redraw:
 hud_upload:
         ld a, HUD_BANK
         call select_bank
-        ld hl, VR_PT + HUD_BASE*8
-        ld de, HUD_PAT
+        ld hl, VR_PT + HUD_BASE*8   ; glyphs 0-75 at HUD_BASE.., the rest at
+        ld de, HUD_PAT              ; HUD_EXTRA0.. (also free in every
+        ld bc, HUD_N0*8             ; playfield set)
         call .tbl
         ld hl, VR_CT + HUD_BASE*8
         ld de, HUD_COL
+        ld bc, HUD_N0*8
         call .tbl
+        if HUD_N > HUD_N0
+        ld hl, VR_PT + HUD_EXTRA0*8
+        ld de, HUD_PAT + HUD_N0*8
+        ld bc, (HUD_N - HUD_N0)*8
+        call .tbl
+        ld hl, VR_CT + HUD_EXTRA0*8
+        ld de, HUD_COL + HUD_N0*8
+        ld bc, (HUD_N - HUD_N0)*8
+        call .tbl
+        endif
         ld a, HUD_BASE
         call hud_clear
         jr hud_redraw
 .tbl:   call vdp_set_write
         ex de, hl
-        ld bc, HUD_N*8
 .t:     ld a, (hl)
         out (VDP_DATA), a
         inc hl

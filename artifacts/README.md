@@ -38,7 +38,7 @@ recordings, one folder per milestone. Files here are committed; `build/` is not.
 - `12-sprites/`: the romhack's blue chompers mapped onto arcade codes $27-$2A (white chompers stay arcade); two-colour Mr. Do; the romhack's EXTRA screen with its waving flag.
 - `13-sound/`: the arcade's own sound engine on the CV SN76489 + SGM AY (chip 1 -> SN, chip 2 -> AY, periods scaled 7/8). Game start on MAME vs the CV; a heavy level-5 round where the logic runs at ~62% speed but the music keeps tempo (the sound tick runs from the NMI every vblank).
 - `14-score-ovals/`: the kill / dessert score ovals (codes $72-$77, arcade colour line $0A: white digits on a black oval) as one white sprite with the digits cut out, over dirt and tunnel. Before, the whole oval was one solid white block.
-- `15-hud/`: the HUD panel (screen columns 24-31, MSX2 layout): 1ST + score, EXTRA box (grey / lit / blinking letters), SCENE, TOP + top score, lives, all mirrored from the arcade's own HUD cells; the dessert drawn from on-demand plate tiles (which freed the HUD's tile codes).
+- `15-hud/`: the HUD panel (screen columns 24-31, MSX2 layout): 1ST + score, EXTRA box (grey / lit / blinking letters), SCENE, TOP + top score, lives (2ND and its score in 2-player games), all mirrored from the arcade's own HUD cells; the dessert drawn from on-demand plate tiles (which freed the HUD's tile codes).
 - `15-hud/hiscore_entry_letter.png`: the name-entry row with the initial being chosen (fg attr $22, full font incl. the heart and '.') now in the high-score screen's tile set.
 - `15-hud/next_letter_marker.png`: the next EXTRA letter (the arcade's letter-monster sprite on the box) marked white on blue in the panel.
 - `09-very-good-cutscene/vg_landed_romhack_frame1/2.png`: once VERY GOOD's characters land, the romhack's picture (tiles + black cover sprites, two frames) replaces the arcade tiles; `vg_arriving_arcade_tiles.png` is the scroll-in just before.
@@ -48,3 +48,4 @@ recordings, one folder per milestone. Files here are committed; `build/` is not.
 - `17-title-logo/`: the romhack's animated "Mr. Do!" logo (colour bars) on the title and above the instruction screen, replacing the arcade logo capture.
 - `10-all-cutscenes/diamond_romhack_clown_frames.png`: the diamond scene's clown and diamond from the romhack (three diamond frames, its sprites); `diamond_scene_credit_1.png`: the credit counted after the coin drops.
 - `10-all-cutscenes/diamond_token_on_top.png`: the arcade's dropping credit token, SAT entry 0 over the romhack clown's sprites.
+- `15-hud/hud_two_players.png`: 2-player game: 2ND and its score (the waiting player's score grey, as the arcade dims it).

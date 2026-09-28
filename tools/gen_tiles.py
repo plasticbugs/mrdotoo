@@ -195,6 +195,7 @@ def main():
         # every set, so the renderer needs no lookup: a non-dirt cell whose
         # bg attribute has bit 7 set shows code DESSERT_BASE + bg tile.
         used.append(len(pats))
+        assert len(pats) <= 161, "codes 161-162 are the HUD's (tools/gen_hud.py HUD_EXTRA)"
         # The dessert's score (arcade $30FD): bg tile $16 + food ("10" ...
         # "80") and $15 ("00"), attribute 9, in the plate's left cells. Fixed
         # codes SCORE_BASE + tile - $15 (src/render.asm not_dirt).

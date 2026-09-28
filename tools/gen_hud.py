@@ -34,8 +34,9 @@ page-aligned for the lookups):
          $FF = not shown
   +$800  glyph code per (class, fg tile < $60): class c at +(c-1)*128
          (0 = blank)
-  +$B00  static cells (the box frame): (panel cell, code) pairs, $FF ends
-  +$B40  every mirrored arcade cell (lo, hi), $FF $FF ends (hud_redraw)
+  +$B80  static cells (the box frame): (panel cell, code) pairs, $FF ends
+  +$BC0  every mirrored arcade cell (lo, hi), $FF $FF ends (hud_redraw)
+Glyphs past code 255 take HUD_EXTRA (161, 162).
 """
 import os
 import sys
@@ -50,11 +51,13 @@ ROOT = HERE.parent
 OUT = ROOT / "build" / "tiles"
 HUD_BASE = 180
 BLANK = 0x29
-CLASSES = {0x09: 1, 0x26: 2, 0x2C: 3, 0x2D: 4, 0x1A: 5, 0x25: 6}
+CLASSES = {0x09: 1, 0x26: 2, 0x2C: 3, 0x2D: 4, 0x1A: 5, 0x25: 6, 0x08: 7}
+HUD_EXTRA = [161, 162]          # also free in every playfield set (they use <= 160)
 DIGITS = list(range(10))
 GLYPHS = {                          # attr -> fg tiles drawn in that colour
     0x09: DIGITS + [0x2E, 0x2F, 0x30, 0x31],            # score, lives
-    0x26: DIGITS + [0x0C, 0x0E, 0x17, 0x1C, 0x1D, 0x28],  # 1ST, SCENE..n
+    0x08: DIGITS,                                        # the other player's score (grey)
+    0x26: DIGITS + [0x0C, 0x0D, 0x0E, 0x17, 0x1C, 0x1D, 0x28],  # 1ST, 2ND, SCENE..n
     0x2C: DIGITS + [0x18, 0x19, 0x1D],                   # TOP, top score
 }
 # EXTRA: the box tile sampled per letter (col 29) and the font letter drawn
@@ -62,6 +65,11 @@ LETTERS = [(12, 0x4E, 0x0E), (14, 0x52, 0x21), (15, 0x54, 0x1D),
            (17, 0x58, 0x1B), (18, 0x5A, 0x0A)]       # (row, box tile, font tile)
 EX_ATTRS = [0x2D, 0x1A, 0x25]
 BOX_ROW, BOX_X0, BOX_X1 = 5, 0, 6    # frame rows 5-7, columns 0-6 of the panel
+
+
+def gcode(i):
+    """Glyph i's code: HUD_BASE.. then the spare HUD_EXTRA codes."""
+    return HUD_BASE + i if HUD_BASE + i < 256 else HUD_EXTRA[HUD_BASE + i - 256]
 
 
 def main():
@@ -84,8 +92,11 @@ def main():
     code = {}
     for attr, tiles in GLYPHS.items():
         for t in tiles:
-            code[(attr, t)] = HUD_BASE + len(glyphs)
-            glyphs.append(G.to_screen2(fg_pixels(attr, t)))
+            code[(attr, t)] = gcode(len(glyphs))
+            px = fg_pixels(attr, t)
+            if attr == 0x08:            # the arcade's grey (88,88,88) is nearest
+                px = [[14 if c != 1 else 1 for c in r] for r in px]    # to TMS
+            glyphs.append(G.to_screen2(px))                     # dark green
 
     # EXTRA letters: box tiles draw the frame with pen 1 (yellow) and the
     # letter with pen 2: grey ($2D, not yet collected), yellow ($1A,
@@ -95,16 +106,19 @@ def main():
     letter_col = {0x2D: (14, 1), 0x1A: (frame_col, 1), 0x25: (1, 1)}
     for row, box, font in LETTERS:
         for a in EX_ATTRS:
+            if a == 0x25:                       # out: black, the blank glyph
+                code[(a, box)] = HUD_BASE
+                continue
             fg, bg = letter_col[a]
             art = fg_pixels(0x09, font)
             art = [[fg if c != 1 else bg for c in r] for r in art]
-            code[(a, box)] = HUD_BASE + len(glyphs)
+            code[(a, box)] = gcode(len(glyphs))
             glyphs.append(G.to_screen2(art))
 
     # The next letter: the arcade marks it with a letter-monster sprite on
     # the box (off our playfield); src/hud.asm finds that sprite and draws
     # the letter with one of these instead: white on the monster's blue.
-    marks = HUD_BASE + len(glyphs)
+    marks = gcode(len(glyphs))
     for row, box, font in LETTERS:
         art = fg_pixels(0x09, font)
         glyphs.append(G.to_screen2([[15 if c != 1 else 4 for c in r] for r in art]))
@@ -128,7 +142,7 @@ def main():
                      ("tr", dict(top=True, right=True)), ("l", dict(left=True)),
                      ("r", dict(right=True)), ("bl", dict(bottom=True, left=True)),
                      ("b", dict(bottom=True)), ("br", dict(bottom=True, right=True))):
-        frame[name] = HUD_BASE + len(glyphs)
+        frame[name] = gcode(len(glyphs))
         glyphs.append(frame_tile(**kw))
     for x in range(BOX_X0, BOX_X1 + 1):
         edge = "l" if x == BOX_X0 else "r" if x == BOX_X1 else ""
@@ -136,7 +150,7 @@ def main():
         static.append(((BOX_ROW + 2) * 8 + x, frame["b" + edge] if edge else frame["b"]))
         if edge:
             static.append(((BOX_ROW + 1) * 8 + x, frame[edge]))
-    assert HUD_BASE + len(glyphs) <= 256, f"{len(glyphs)} glyphs"
+    assert len(glyphs) <= 256 - HUD_BASE + len(HUD_EXTRA), f"{len(glyphs)} glyphs"
 
     # panel map: (strip column 0-5, row) -> panel cell
     pmap = bytearray(b"\xff" * (6 * 32))
@@ -148,6 +162,10 @@ def main():
         put(30, r, 1, i)                        # 1ST
     for i, r in enumerate(range(5, 11)):
         put(29, r, 2, 2 + i)                    # score
+    for i, r in enumerate((23, 24, 25)):
+        put(30, r, 3, i)                        # 2ND (2-player game)
+    for i, r in enumerate(range(21, 27)):
+        put(29, r, 4, 2 + i)                    # its score
     for i, (r, _, _) in enumerate(LETTERS):
         put(29, r, BOX_ROW + 1, BOX_X0 + 1 + i)  # EXTRA letters
     for i, r in enumerate((17, 18, 19, 20, 21, 24, 25, 26)):
@@ -164,7 +182,7 @@ def main():
     for a, c in CLASSES.items():
         cls[a] = c
 
-    gtab = bytearray(6 * 128)
+    gtab = bytearray(7 * 128)
     for (a, t), c in code.items():
         gtab[(CLASSES[a] - 1) * 128 + t] = c
     for a in CLASSES:                           # the arcade's blank: black
@@ -172,7 +190,7 @@ def main():
     cells = [(r * 32 + (s_ if s_ < 3 else s_ + 26)) for s_ in range(6) for r in range(32)
              if pmap[s_ * 32 + r] != 0xFF]
 
-    blob = bytearray(0xC00)
+    blob = bytearray(0xD00)
     n = len(glyphs)
     blob[0x000:0x000 + n * 8] = b"".join(p for p, _ in glyphs)
     blob[0x300:0x300 + n * 8] = b"".join(c for _, c in glyphs)
@@ -180,13 +198,13 @@ def main():
     blob[0x700:0x700 + len(pmap)] = pmap
     blob[0x800:0x800 + len(gtab)] = gtab
     st = b"".join(bytes([p, c]) for p, c in static) + b"\xff"
-    blob[0xB00:0xB00 + len(st)] = st
+    blob[0xB80:0xB80 + len(st)] = st
     cl = b"".join(bytes([c & 0xFF, c >> 8]) for c in cells) + b"\xff\xff"
-    blob[0xB40:0xB40 + len(cl)] = cl
-    assert len(st) <= 0x40 and 0xB40 + len(cl) <= len(blob) and n * 8 <= 0x300
+    blob[0xBC0:0xBC0 + len(cl)] = cl
+    assert len(st) <= 0x40 and 0xBC0 + len(cl) <= len(blob) and n * 8 <= 0x300
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "hud.bin").write_bytes(blob)
-    (OUT / "hud.inc").write_text(f"HUD_N equ {n}\nHUD_MARK equ {marks}\n"
+    (OUT / "hud.inc").write_text(f"HUD_N equ {n}\nHUD_MARK equ {marks}\nHUD_EXTRA0 equ {HUD_EXTRA[0]}\n"
                                  f"HUD_LETTER0 equ {(BOX_ROW + 1) * 8 + BOX_X0 + 1}\n")
     print(f"hud.bin: {n} glyphs (codes {HUD_BASE}-{HUD_BASE + n - 1}), "
           f"frame colour {frame_col}, {len(static)} static cells, {len(cells)} mirrored cells")
