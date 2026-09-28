@@ -2,6 +2,8 @@
 cam 4
 sig 1db 2b
 font
+# the initial being chosen (arcade $1855: fg attr $22, tiles $0A-$29); kept by hand: re-add after a recapture
+fontattr 22
 00 29 00 29 344130
 00 29 09 29 46744
 00 29 09 00 44894

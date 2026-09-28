@@ -65,11 +65,14 @@ INDEX = 16
 def load(name):
     cam, sig, band, cells, pairs = None, None, None, Counter(), Counter()
     font = False
+    fontattr = set()
     for line in (HERE / "data" / "screens" / f"{name}.txt").read_text().splitlines():
         if not line or line[0] == "#":
             continue
         f = line.split()
-        if f[0] == "cam":
+        if f[0] == "fontattr":          # every font character in these fg
+            fontattr |= {int(x, 16) for x in f[1:]}     # attributes
+        elif f[0] == "cam":
             cam = int(f[1])
         elif f[0] == "sig":
             sig = (int(f[1], 16), int(f[2], 16))
@@ -81,6 +84,9 @@ def load(name):
             pairs[tuple(int(x, 16) for x in f[1:5])] += int(f[5])
         else:
             cells[tuple(int(x, 16) for x in f[:4])] += int(f[4])
+    for attr in fontattr:
+        for t in FONT_TILES:
+            cells[(0, BLANK, attr, t)] += 0
     return cam, sig, band, cells, pairs, font or band is not None
 
 
