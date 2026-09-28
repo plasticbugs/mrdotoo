@@ -33,6 +33,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "build" / "tiles"
 ROM = (DIS / "mrdo_main.bin").read_bytes()
 
+USE_HACK_CHERRIES = False   # the CV romhack's cherry art instead of the arcade's
 MAX = 224                   # codes 0..223 per set; 224..255 stay free for the HUD
 SET_BYTES = 2 + MAX * 16
 FONT_ATTR = 0x09
@@ -110,9 +111,11 @@ def main():
     # The CV romhack's cherry art (tools/gen_sprites_hack.py): 4 tiles in the
     # order $78-$7B, 8 pattern + 8 colour bytes each, already in the player's
     # view; background colour 0 = let the dirt show through.
+    # Off by default (user, 2026-09-27): the cherries stay exactly as the
+    # arcade draws them, so arcade-only tile glitches stay reproducible.
     hack = ROOT / "build" / "tiles" / "cherry_hack.bin"
     cherry = {}
-    if hack.exists():
+    if USE_HACK_CHERRIES and hack.exists():
         hb = hack.read_bytes()
         for i, t in enumerate(sorted(CHERRY_TILES)):
             cherry[t] = (hb[i * 16:i * 16 + 8], hb[i * 16 + 8:i * 16 + 16])

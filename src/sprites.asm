@@ -82,6 +82,7 @@ sprites_update:
         and 1
         jp z, .skip
 .notfrag:
+        ld a, (hl)              ; Y again (the code check above replaced it)
         ld ixl, 0               ; IXL = early-clock bit
         cpl
         sub 31                  ; A = 224 - Y = screen x
