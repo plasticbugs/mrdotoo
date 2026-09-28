@@ -108,6 +108,7 @@ up_hold:        ds 1            ; vblanks a tile-set change has waited (render.a
 hud_p:          ds 1            ; hud.asm: panel cell being written
 plate_want:     ds 1            ;   dessert the playfield shows ($FF: none yet)
 plate_food:     ds 1            ;   dessert in codes PLATE_CODE.. ($FF: none)
+hud_next:       ds 1            ;   the EXTRA letter the next letter monster carries
 scn_flush2:     ds 1            ; a heavy build's colours and names are due
 scn_brow:       ds 1            ; next band row of the build under way (0 = none)
 scn_lastn:      ds 1            ; tiles of the previous build

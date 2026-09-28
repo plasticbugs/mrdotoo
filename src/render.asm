@@ -193,6 +193,7 @@ render_init:
         ld (scr), a
         ld (plate_want), a
         ld (plate_food), a
+        ld (hud_next), a
         xor a
         ld (mode), a
         ld (cw_valid), a
@@ -215,7 +216,7 @@ render_body:
         call scene_vblank       ; a cutscene band's new tiles and names
         ld a, (mode)
         cp MODE_IMAGE
-        jr z, .image
+        jp z, .image
         or a
         call nz, sprites_update ; first, inside vblank
         call check_colourway
@@ -230,6 +231,7 @@ render_body:
         ld hl, plate_food
         cp (hl)
         call nz, plate_load
+        call hud_scan           ; the next EXTRA letter's marker (hud.asm)
         ld a, TBL_BANK
         jr .bank
 .scrm:

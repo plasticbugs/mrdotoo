@@ -12,7 +12,9 @@ like the MSX2 port's:
     rows 5-7 EXTRA box       a drawn frame; one letter per EXTRA letter, its
                              state from the fg attribute of one of its box
                              tiles (col 29 rows 12/14/15/17/18): $2D unlit,
-                             $1A lit, $25 active (white on blue)
+                             $1A lit, $25 out (black); the next letter (the
+                             arcade's letter-monster sprite on the box) white
+                             on blue
     row 17  SCENE..n         col 2 rows 17-21, 24, 25, 26
     row 19  TOP              col 1 rows 17-19
     row 20  top score        col 1 rows 21-26
@@ -87,14 +89,10 @@ def main():
 
     # EXTRA letters: box tiles draw the frame with pen 1 (yellow) and the
     # letter with pen 2: grey ($2D, not yet collected), yellow ($1A,
-    # collected) or black ($25, the active letter). The arcade's grey
+    # collected) or black ($25: its letter monster is out). The arcade's grey
     # (88,88,88) is nearest to TMS black, so the grey is TMS grey 14.
-    # The arcade blacks out the letter the alpha monster carries ($25) and
-    # puts the letter-monster sprite over it; that sprite sits off our
-    # playfield, so the active letter is drawn like it instead: white on the
-    # monster's blue.
     frame_col = G.tms_index(pal[(0x2D & 0x3F) * 4 + 1])
-    letter_col = {0x2D: (14, 1), 0x1A: (frame_col, 1), 0x25: (15, 4)}
+    letter_col = {0x2D: (14, 1), 0x1A: (frame_col, 1), 0x25: (1, 1)}
     for row, box, font in LETTERS:
         for a in EX_ATTRS:
             fg, bg = letter_col[a]
@@ -102,6 +100,14 @@ def main():
             art = [[fg if c != 1 else bg for c in r] for r in art]
             code[(a, box)] = HUD_BASE + len(glyphs)
             glyphs.append(G.to_screen2(art))
+
+    # The next letter: the arcade marks it with a letter-monster sprite on
+    # the box (off our playfield); src/hud.asm finds that sprite and draws
+    # the letter with one of these instead: white on the monster's blue.
+    marks = HUD_BASE + len(glyphs)
+    for row, box, font in LETTERS:
+        art = fg_pixels(0x09, font)
+        glyphs.append(G.to_screen2([[15 if c != 1 else 4 for c in r] for r in art]))
 
     # frame: lines 2 px thick, placed to hug the letter row
     def frame_tile(top=False, bottom=False, left=False, right=False):
@@ -180,7 +186,8 @@ def main():
     assert len(st) <= 0x40 and 0xB40 + len(cl) <= len(blob) and n * 8 <= 0x300
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "hud.bin").write_bytes(blob)
-    (OUT / "hud.inc").write_text(f"HUD_N equ {n}\n")
+    (OUT / "hud.inc").write_text(f"HUD_N equ {n}\nHUD_MARK equ {marks}\n"
+                                 f"HUD_LETTER0 equ {(BOX_ROW + 1) * 8 + BOX_X0 + 1}\n")
     print(f"hud.bin: {n} glyphs (codes {HUD_BASE}-{HUD_BASE + n - 1}), "
           f"frame colour {frame_col}, {len(static)} static cells, {len(cells)} mirrored cells")
 

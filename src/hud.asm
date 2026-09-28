@@ -92,8 +92,20 @@ hud_cell_m:
         ld h, a
         ld a, (hl)
         or a
-        jr nz, hud_put
+        jr nz, .mark
 .blank: ld a, HUD_BASE
+.mark:  ld b, a                 ; the next EXTRA letter: the marker glyph
+        ld a, (hud_next)
+        cp 5
+        jr nc, .put
+        add a, HUD_LETTER0
+        ld c, a
+        ld a, (hud_p)
+        cp c
+        jr nz, .put
+        sub HUD_LETTER0 - HUD_MARK
+        jr hud_put
+.put:   ld a, b
         ; fall through
 ; A = code, (hud_p) = panel cell (row*8 + x): write it into both name tables.
 ; Clobbers AF, BC, HL.
@@ -247,3 +259,72 @@ plate_load:
         inc hl
         djnz .b
         ret
+
+; The next EXTRA letter: the arcade marks it with a letter-monster sprite on
+; the box (sprite queue X = $E9, colour 4, Y = $A0 - 12 * letter), which is
+; off our playfield. Each vblank: find it, and when the marked letter
+; changes, redraw the old and the new letter. Playfield mode.
+; Clobbers everything.
+hud_scan:
+        ld hl, ARC_WORK + $312
+        ld b, 40
+.e:     inc hl
+        ld a, (hl)              ; Y (0 ends the queue)
+        or a
+        jr z, .none
+        inc hl
+        ld c, (hl)              ; colour
+        inc hl
+        ld d, a
+        ld a, (hl)              ; X
+        inc hl
+        cp $E9
+        jr nz, .n
+        ld a, c
+        and $0F
+        cp 4
+        jr nz, .n
+        ld a, d                 ; letter = ($A0 - Y) / 12
+        ld c, $A0
+        ld e, 0
+.l:     cp c
+        jr z, .got
+        ld d, a
+        ld a, c
+        sub 12
+        ld c, a
+        ld a, d
+        inc e
+        bit 3, e                ; (never more than 5 steps: stop at 8)
+        jr z, .l
+.n:     djnz .e
+.none:  ld e, $FF
+.got:   ld a, (hud_next)
+        cp e
+        ret z
+        ld d, a
+        ld a, e
+        ld (hud_next), a
+        ld a, d                 ; old letter, then the new one
+        call .cell
+        ld a, (hud_next)
+.cell:  cp 5
+        ret nc
+        ld hl, .rows
+        add a, l
+        ld l, a
+        jr nc, .r
+        inc h
+.r:     ld a, (hl)              ; cell = row * 32 + 29
+        ld l, a
+        ld h, 0
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        ld de, 29
+        add hl, de
+        ex de, hl
+        jp hud_cell
+.rows:  db 12, 14, 15, 17, 18   ; the box tile sampled per letter (gen_hud.py)
