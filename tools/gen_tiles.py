@@ -135,16 +135,17 @@ def _dist(a, b):
 
 def _draft_row(cols, mask):
     """8 TMS colours + cherry mask -> the same 8 using at most 2 colours:
-    the pair (of the colours present) with the least colour error, cherry
-    pixels weighing 4x dirt; every pixel takes the nearer of the two. (Keeping
-    the most-used pair instead painted the dirt between cherries red.)"""
-    cand = sorted(set(cols))
+    the pair covering the most weight (cherry pixels count 3, dirt 1); any
+    other colour goes to the nearer of the two. (The Cherry Lab's drafts,
+    chosen by the user, 2026-09-28.)"""
+    w = Counter()
+    for c, m in zip(cols, mask):
+        w[c] += 3 if m else 1
+    cand = list(w)
     if len(cand) <= 2:
         return list(cols)
-    def cost(a, b):
-        return sum((4 if m else 1) * min(_dist(c, a), _dist(c, b)) for c, m in zip(cols, mask))
-    _, a, b = min((cost(a, b), a, b) for i, a in enumerate(cand) for b in cand[i + 1:])
-    return [a if _dist(c, a) <= _dist(c, b) else b for c in cols]
+    _, a, b = max((w[a] + w[b], a, b) for i, a in enumerate(cand) for b in cand[i + 1:])
+    return [c if c in (a, b) else (a if _dist(c, a) <= _dist(c, b) else b) for c in cols]
 
 
 def cherry_design(dirt_pair):
@@ -176,18 +177,7 @@ def cherry_design(dirt_pair):
             for x in range(8):
                 tms[qy * 8 + y][qx * 8 + x] = tms_index(out[y][x])
                 msk[qy * 8 + y][qx * 8 + x] = m[y][x]
-    out = [_draft_row(tms[y][0:8], msk[y][0:8]) + _draft_row(tms[y][8:16], msk[y][8:16]) for y in range(16)]
-    # A half-row that keeps the cherry's red and its black outline has no
-    # colour left for the dirt: the dirt there turns black (a shadow behind
-    # the cherries) instead of red.
-    for y in range(16):
-        for h in (0, 8):
-            seg = out[y][h:h + 8]
-            if CHERRY_RED in seg and 1 in seg:
-                for x in range(h, h + 8):
-                    if not msk[y][x]:
-                        out[y][x] = 1
-    return out
+    return [_draft_row(tms[y][0:8], msk[y][0:8]) + _draft_row(tms[y][8:16], msk[y][8:16]) for y in range(16)]
 
 
 def apple_sprite():
