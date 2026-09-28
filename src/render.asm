@@ -38,6 +38,7 @@ PF_ROWS         equ 24
 BUSY_MIN        equ 16          ; cell writes per vblank that mean a repaint is still going
 RD_WAIT_MAX     equ 30          ; vblanks a full redraw may wait for it
 FLIP_WAIT_MAX   equ 8           ; vblanks a finished redraw may wait for the queue
+UP_HOLD_MAX     equ 60          ; vblanks a tile-set change may wait for Mr. Do to hide
 CAM_TOP         equ 3
 CAM_MID         equ 4
 CAM_BOTTOM      equ 5
@@ -240,7 +241,7 @@ render_body:
         inc a
         ld (rd_wait), a
         cp RD_WAIT_MAX
-        jr c, .done
+        jp c, .done
 .start: xor a
         ld (q_busy), a
         ld (rd_wait), a
@@ -286,9 +287,45 @@ render_body:
         call flip_pnt
         jr .done
 .upload:
+        ld a, (ARC_WORK)        ; the dessert sequence ($E000 bit 3; the field
+        bit 3, a                ; turns to the chomper colours while Mr. Do is
+        jr z, .up               ; still shown): the upload's blank frame would
+        ld a, (up_hold)         ; blink him, so it waits until the arcade
+        inc a                   ; hides him (~16 vblanks), at most UP_HOLD_MAX
+        cp UP_HOLD_MAX
+        jr nc, .up
+        ld (up_hold), a
+        call mrdo_queued
+        jr nc, .up
+        ld a, 1                 ; try again next vblank
+        ld (flip_wait), a
+        jr .done
+.up:    xor a
+        ld (up_hold), a
         call upload_set
 .done:  ld a, ARC_HI_BANK
         jp select_bank
+
+; Carry if the arcade's sprite queue holds a Mr. Do code ($00-$26).
+; Clobbers AF, BC, HL.
+mrdo_queued:
+        ld hl, ARC_WORK + $312
+        ld b, 40
+.l:     ld a, (hl)
+        inc hl
+        ld c, (hl)              ; Y = 0 ends the queue
+        inc c
+        dec c
+        jr z, .none
+        and $7F
+        cp $27
+        ret c
+        inc hl
+        inc hl
+        inc hl
+        djnz .l
+.none:  or a
+        ret
 
 ; Show the name table the last full redraw went into (a scene's band names
 ; go into it at the next vblank).

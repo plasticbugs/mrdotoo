@@ -104,6 +104,7 @@ snd_mix:        ds 1            ;   AY mixer
 snd_nvol2:      ds 1            ;   chip 2 noise volume (AY scale)
 snd_tvolc:      ds 1            ;   chip 2 tone 2 volume (AY scale)
 snd_due:        ds 1            ;   sound ticks owed (one per vblank)
+up_hold:        ds 1            ; vblanks a tile-set change has waited (render.asm)
 scn_flush2:     ds 1            ; a heavy build's colours and names are due
 scn_brow:       ds 1            ; next band row of the build under way (0 = none)
 scn_lastn:      ds 1            ; tiles of the previous build
