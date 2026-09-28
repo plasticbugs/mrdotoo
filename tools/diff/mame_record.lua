@@ -44,6 +44,19 @@ end
 
 local function install()
   validate_patches()
+  -- HEAVY=1 (tools/diff/cv_replay.tcl does the same): level 5 (8 monsters),
+  -- Mr. Do invincible (the collision checks' death branches never taken),
+  -- the letter monster + chompers forced every 600 handlers (at handler
+  -- start, below)
+  if os.getenv("HEAVY") then
+    -- the death tests `jr nc` after the collision checks become `jr`
+    local rom = manager.machine.memory.regions[":maincpu"]
+    for _, a in ipairs({0x32A6, 0x44B0, 0x4B94}) do rom:write_u8(a, 0x18) end
+    taps[#taps + 30] = mem:install_read_tap(0x1A76, 0x1A76, "lvl", function(off, data, mask)
+      if cpu.state["CURPC"].value == 0x1A76 then mem:write_u8(0xE09F, 4) end
+      return data
+    end)
+  end
   taps[1] = mem:install_read_tap(0x0156, 0x0156, "snap", function(off, data, mask)
     if finished or cpu.state["CURPC"].value ~= 0x00E9 then return data end
     ram:write(mem:read_range(0xE000, 0xEFFF, 8)); ram:write(mem:read_range(0x8000, 0x8FFF, 8))
@@ -64,6 +77,9 @@ local function install()
       local it = tonumber(os.getenv("ITRACE") or "-1")
       -- SCEN (vg|w|dia|ext) + POKEH=h: end the round into that scene at the
       -- start of handler h (tools/diff/cv_replay.tcl does the same)
+      if os.getenv("HEAVY") and n > 0 and n % 600 == 0 then
+        mem:write_u8(0xE0B2, mem:read_u8(0xE0B2) | 3)
+      end
       if os.getenv("SCEN") and n == tonumber(os.getenv("POKEH") or "-1") then
         local sc = os.getenv("SCEN")
         local lv = ({vg=0x03, w=0x10, dia=0x01, ext=0x01})[sc]

@@ -89,6 +89,8 @@ scn_fill:       ds 1            ; a new scene: half rows of caches filled (scene
 scn_ph:         ds 1            ; phase of the build (scroll & 7)
 scn_k:          ds 1            ; band row being built
 scn_fast:       ds 1            ; 8-byte groups the flush may still write back to back
+spr_new:        ds 1            ; the arcade copied new sprite data (opt_spr_copy)
+spr_cam:        ds 1            ; camera of the last sprite pass
 scn_flush2:     ds 1            ; a heavy build's colours and names are due
 scn_brow:       ds 1            ; next band row of the build under way (0 = none)
 scn_lastn:      ds 1            ; tiles of the previous build
@@ -848,6 +850,9 @@ font_len equ $-font
         include "sprites.asm"
         include "scene.asm"
 
+        assert $ <= OPT_BASE
+        ds OPT_BASE-$, $FF
+        include "opt.asm"
         assert $ <= VSTUB_BASE
         ds VSTUB_BASE-$, $FF
         include "build/vstubs.inc"

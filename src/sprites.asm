@@ -55,6 +55,17 @@ SPR_PIN_MAX     equ 4
 BALL_CODE       equ $70         ; the power ball and its burst fragments
 
 sprites_update:
+        ld a, (cam)             ; nothing new since the last pass (no sprite
+        ld hl, spr_cam          ; RAM copy, same camera)? The SAT stands.
+        cp (hl)
+        jr nz, .new
+        ld a, (spr_new)
+        or a
+        ret z
+.new:   ld a, (cam)
+        ld (spr_cam), a
+        xor a
+        ld (spr_new), a
         ld a, SPR_BANK_A
         call select_bank
         exx                     ; the arcade uses the alternate set too

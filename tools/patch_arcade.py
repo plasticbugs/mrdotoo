@@ -226,6 +226,44 @@ def special_patches():
         put_bytes(a, [0x7E, 0x00, 0x00, 0x00, 0x00], "protection read: always pass")
 
 
+# Speed patches: hot loops rewritten in place (same address, same RAM effects
+# every frame; `make validate` proves it). Rare slow paths call into the
+# driver's fixed bank through a jump table at OPT_BASE (src/opt.asm): entry k
+# is at OPT_BASE + 3k.
+OPT_BASE = 0xBD00
+OPT_SND_SLOT = OPT_BASE + 0
+OPT_SPR_COPY = OPT_BASE + 3
+
+
+def speed_patches():
+    if os.environ.get("NOSPEED"):       # A/B testing: the plain arcade loops
+        return
+    # Sound tick $5A90: 38 request-flag bytes at $EC00, each tested with three
+    # `bit n,(ix+0)` / `call nz` pairs (~113 T a slot, nearly all idle). Now:
+    # one `ld a,(hl) / and 7` per slot (~43 T); a slot with a request calls
+    # the original three tests (opt_snd_slot). IX ends at $EC26 as before.
+    assert ORIG[0x5A90:0x5AAF] == bytes.fromhex(
+        "dd2100ec0626ddcb0056c4f65addcb0046c41d5bddcb004ec4f65add2310e7")
+    code = bytes([0x21, 0x00, 0x6C,                 # ld hl,$EC00 (CV $6C00)
+                  0x06, 0x26,                       # ld b,$26
+                  0x7E,                             # L: ld a,(hl)
+                  0xE6, 0x07,                       # and 7
+                  0xC4, OPT_SND_SLOT & 0xFF, OPT_SND_SLOT >> 8,   # call nz,opt_snd_slot
+                  0x23,                             # inc hl
+                  0x10, 0xF7,                       # djnz L
+                  0xDD, 0x21, 0x26, 0x6C,           # ld ix,$EC26
+                  0x18])                            # jr $5AAF
+    code += bytes([0x5AAF - (0x5A90 + len(code) + 1)])
+    code += bytes([0x00] * (0x5AAF - 0x5A90 - len(code)))
+    put_bytes(0x5A90, code, "sound tick: fast idle-slot scan (opt_snd_slot)")
+    # The handler's sprite RAM copy ($026D, called when $E001 bit 7 is set):
+    # through opt_spr_copy, which also tells the renderer there is new
+    # sprite data (vblanks without any skip the sprite pass).
+    assert ORIG[0x00C8:0x00CB] == bytes([0xC4, 0x6D, 0x02])
+    put_bytes(0x00C8, bytes([0xC4, OPT_SPR_COPY & 0xFF, OPT_SPR_COPY >> 8]),
+              "sprite RAM copy via opt_spr_copy (new-sprites flag)")
+
+
 # Video RAM write sites (tools/profile/sweep: every PC that wrote $8000-$8FFF).
 # Each store becomes a same-size hook into the driver, which does the store,
 # queues the cell for the renderer, and drops or redirects stores that miss
@@ -306,6 +344,7 @@ def main():
     cm = json.loads((ROOT / "build" / "codemap.json").read_text())
     validate = "--validate" in sys.argv
     special_patches()
+    speed_patches()
     stubs = video_hooks(cm)
     if validate:
         for a, data, why in VALIDATE_PATCHES:

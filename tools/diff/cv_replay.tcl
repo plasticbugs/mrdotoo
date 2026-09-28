@@ -57,8 +57,20 @@ proc scene_poke {} {
     set fl [dict get {vg 0x80 w 0x80 dia 0xA0 ext 0x88} $sc]
     poke 0x609B $lv; poke 0x60C7 $why; poke 0x61B6 [expr {[peek 0x61B6] | $fl}]
 }
+# HEAVY=1: level 5, Mr. Do invincible, letter monster + chompers forced every
+# 600 handlers, as tools/diff/mame_record.lua does
+if {[info exists ::env(HEAVY)]} {
+    after time 0.5 { foreach a {0x32A6 0x44B0 0x4B94} { poke $a 0x18 } }  ;# jr nc -> jr (after the copy to RAM)
+    debug set_bp 0x1A76 {} { poke 0x609F 4 }
+}
+proc heavy_poke {} {
+    if {[info exists ::env(HEAVY)] && $::h > 0 && $::h % 600 == 0} {
+        poke 0x60B2 [expr {[peek 0x60B2] | 3}]
+    }
+}
 proc on_handler {} {
     scene_poke
+    heavy_poke
     if {[info exists ::env(HTRACE)] && $::h >= $::env(HTRACE) && $::h <= $::env(HTRACE) + 4} {
         puts stderr [format "HT h=%d handler entry sp=%04x ret=%04x" $::h [reg sp] [peek16 [reg sp]]]
     }
