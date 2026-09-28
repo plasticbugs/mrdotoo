@@ -133,7 +133,9 @@ emu.register_frame_done(function()
     return
   end
   if finished == nil then return end
-  if f == 600 then setf(P2, "Coin 1", 1) elseif f == 606 then setf(P2, "Coin 1", 0) end
+  if not os.getenv("NOCOIN") then   -- NOCOIN: leave the attract sequence running
+    if f == 600 then setf(P2, "Coin 1", 1) elseif f == 606 then setf(P2, "Coin 1", 0) end
+  end
   if not os.getenv("NOSTART") then
     if f == 700 then setf(P1, "1 Player Start", 1) elseif f == 706 then setf(P1, "1 Player Start", 0) end
   end

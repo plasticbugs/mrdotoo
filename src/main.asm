@@ -59,14 +59,20 @@ cw_attr:        ds 1            ; bg pair last seen at the playfield corner
 cw_tile:        ds 1
 dirt_tile:      ds 1
 tbl_page:       ds 1            ; TBLA page in the tables bank
-up_state:       ds 1            ; tile upload: 0 idle, 1-6 table in progress
+up_pending:     ds 1            ; a tile set waits for the redraw to finish
+pnt_front:      ds 1            ; high byte of the name table on screen
+pnt_back:       ds 1            ; ... and of the hidden one (full redraws)
+flip_wait:      ds 1            ; redraw done, draining into it before the flip
+flip_mark:      ds 1            ; queue position it must catch up to
+q_busy:         ds 1            ; cells written while a full redraw was pending
+rd_wait:        ds 1            ; vblanks the pending redraw has waited
 mode:           ds 1            ; MODE_NONE / MODE_PLAYFIELD / MODE_SCREEN
 cw_valid:       ds 1            ; the playfield corner shows a known colourway
 scr:            ds 1            ; screen index in MODE_SCREEN
 scr_hpage:      ds 1            ; its hash table page in SCR_HASH_BANK
 up_bank:        ds 1
 up_set:         ds 2
-up_len:         ds 2
+up_len:         ds 1            ; tile count (8-byte groups per table)
 up_off:         ds 2
 spr_key:        ds 2            ; sprites.asm
 evict_ptr:      ds 1
@@ -311,6 +317,9 @@ rst_vectors:
 ; $0008 hook, reached by rst $08 (every arcade `ei`). The byte at $0009 picks
 ; the path, so the NMI can switch it with one (atomic) write.
 HOOK_SEL        equ $0009
+IDLE_LOOP       equ $00AC               ; arcade `jr $` main loop
+IDLE_LOOP2      equ $0154               ; ... and the one after the pathfinder
+        assert high IDLE_LOOP == 0 && high IDLE_LOOP2 == 1
 PF_STARVE_MAX   equ 3               ; skip every 3rd back-to-back held vblank
 HOOK_PENDING    equ $0C - $0A       ; jr offset to the jp take_irq
 ei_hook:
@@ -441,6 +450,42 @@ take_irq:
         ld (HOOK_SEL), a
 .none:
         IFNDEF VALIDATE         ; (validation delivers every vblank, as MAME)
+        push hl                 ; Only a busy background can starve: the
+        ld hl, 4                ; vblank would preempt a pathfinder start
+        add hl, sp              ; (`call`), or a `ret` into anything but the
+        ld a, (hl)              ; two idle loops.
+        inc hl
+        ld h, (hl)
+        ld l, a                 ; HL = R
+        ld a, (hl)
+        cp $CD
+        jr z, .busy
+        cp $C9
+        jr nz, .idle
+        ld hl, 6
+        add hl, sp
+        ld a, (hl)
+        inc hl
+        ld h, (hl)
+        ld l, a                 ; HL = the ret's target
+        ld a, h
+        or a
+        jr nz, .hi
+        ld a, l
+        cp low IDLE_LOOP
+        jr z, .idle
+        jr .busy
+.hi:    dec a
+        jr nz, .busy
+        ld a, l
+        cp low IDLE_LOOP2
+        jr nz, .busy
+.idle:  pop hl
+        xor a
+        ld (pf_starve), a
+        pop af
+        jr irq_after_ei
+.busy:  pop hl
         ld a, (pf_starve)       ; held vblanks delivered back to back, with
         inc a                   ; no time for the background code between
         cp PF_STARVE_MAX        ; them? When the handler overruns every

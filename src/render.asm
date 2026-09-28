@@ -35,6 +35,9 @@ DRAIN_MAX       equ 40          ; queued cells drawn per vblank
 REDRAW_ROWS     equ 6           ; rows per vblank during a full redraw
 REDRAW_ROWS_SCR equ 2           ;   (screen mode: hashed lookups)
 PF_ROWS         equ 24
+BUSY_MIN        equ 16          ; cell writes per vblank that mean a repaint is still going
+RD_WAIT_MAX     equ 30          ; vblanks a full redraw may wait for it
+FLIP_WAIT_MAX   equ 8           ; vblanks a finished redraw may wait for the queue
 CAM_TOP         equ 3
 CAM_MID         equ 4
 CAM_BOTTOM      equ 5
@@ -76,8 +79,14 @@ vstore:
 
 ; HL = video address -> dirty queue (producer side). Clobbers AF.
 ; The NMI only advances q_tail and the arcade only advances q_head, so the
-; ring needs no locking. A full queue asks for a full redraw instead.
+; ring needs no locking. A full queue asks for a full redraw instead; while
+; one is pending, cells are only counted (the redraw covers them), so a bulk
+; repaint (the chomper session's 1248-byte fill) costs little and the
+; renderer can tell when it has finished.
 queue_cell:
+        ld a, (redraw_all)
+        or a
+        jr nz, .count
         push de
         push hl
         ld a, h
@@ -104,6 +113,11 @@ queue_cell:
         ld (redraw_all), a
         pop hl
         pop de
+        ret
+.count: ld a, (q_busy)
+        inc a
+        ret z                   ; (saturates at 255)
+        ld (q_busy), a
         ret
 
 ; The arcade's store forms, reached by rst. All preserve every register and flag.
@@ -160,7 +174,11 @@ render_init:
         ld (q_head), a
         ld (q_tail), a
         ld (redraw_all), a
-        ld (up_state), a
+        ld (up_pending), a
+        ld a, high VR_PNT
+        ld (pnt_front), a
+        ld a, high VR_PNT2
+        ld (pnt_back), a
         ld a, $FF
         ld (cw), a
         ld (scr), a
@@ -183,16 +201,10 @@ render:
         jp select_bank
 
 render_body:
-        ld a, (up_state)
-        or a
-        jp nz, upload_step
         ld a, (mode)
         or a
         call nz, sprites_update ; first, inside vblank
         call check_colourway
-        ld a, (up_state)
-        or a
-        ret nz
         ld a, (mode)
         or a
         ret z                   ; no tile set yet
@@ -205,19 +217,73 @@ render_body:
         ld a, (redraw_all)
         or a
         jr z, .noreq
+        ld a, (q_busy)          ; the arcade still writing many cells (a bulk
+        cp BUSY_MIN             ; repaint)? Wait for it to finish, keeping
+        jr c, .start            ; the old picture on screen
         xor a
+        ld (q_busy), a
+        ld a, (rd_wait)
+        inc a
+        ld (rd_wait), a
+        cp RD_WAIT_MAX
+        jr c, .done
+.start: xor a
+        ld (q_busy), a
+        ld (rd_wait), a
         ld (redraw_all), a
+        ld (flip_wait), a
         ld (rd_row), a          ; restart the full redraw
         ld a, (q_head)          ; everything queued so far is covered by it
         ld (q_tail), a
 .noreq: ld a, (rd_row)
         cp PF_ROWS
         jr nc, .drain
-        call redraw_rows
+        call redraw_rows        ; into the hidden name table
+        ld a, (rd_row)
+        cp PF_ROWS
+        jr c, .done
+        ld a, (q_head)          ; complete. Cells the arcade changed while
+        ld (flip_mark), a       ; it ran (it may have been mid-repaint) go
+        ld a, FLIP_WAIT_MAX     ; into it too before it is shown: the queue
+        ld (flip_wait), a       ; up to here.
         jr .done
 .drain: call drain_queue
+        ld a, (flip_wait)
+        or a
+        jr z, .done
+        dec a
+        ld (flip_wait), a
+        jr z, .show             ; (safety: never wait longer than this)
+        ld a, (q_tail)
+        ld b, a
+        ld a, (flip_mark)
+        cp b
+        jr nz, .done            ; still catching up
+        xor a
+        ld (flip_wait), a
+.show:  ld a, (up_pending)      ; show it, with its new tile set
+        or a
+        jr nz, .upload
+        call flip_pnt
+        jr .done
+.upload:
+        call upload_set
 .done:  ld a, ARC_HI_BANK
         jp select_bank
+
+; Show the name table the last full redraw went into.
+flip_pnt:
+        ld a, (pnt_back)
+        ld b, a
+        ld a, (pnt_front)
+        ld (pnt_back), a
+        ld a, b
+        ld (pnt_front), a
+        rrca                    ; R2 = PNT / $400
+        rrca
+        and $3F
+        ld c, 2
+        jp vdp_reg
 
 ; Which colourway is on screen? The arcade fills the playfield background with
 ; the level's dirt; its bottom-left corner cell ($83) identifies it.
@@ -373,107 +439,76 @@ check_screens:
         jp select_bank
 
 ; -----------------------------------------------------------------------------
-; Tile set upload: patterns and colours into all three thirds, 512 bytes per
-; vblank with the display blanked, then a full redraw.
+; Tile set change. All three thirds of the screen share one pattern and one
+; colour table (VDP_R3/VDP_R4 mask the third bits), so a set is 2 x 1792 bytes.
+; upload_start only records the set and asks for a full redraw, which goes
+; into the hidden name table while the old picture stays on screen. When it
+; is complete, upload_set blanks the display (backdrop = the new set's main
+; colour), writes both tables at full speed, shows the new name table and
+; turns the display back on: about one frame of flat colour instead of the
+; ~24 black frames a live upload took.
 ; A = bank, HL = set address.
 upload_start:
         ld (up_bank), a
         ld (up_set), hl
-        push hl
-        call select_bank
-        pop hl
-        ld a, (hl)              ; tile count
-        ld l, a
-        ld h, 0
-        add hl, hl
-        add hl, hl
-        add hl, hl
-        ld (up_len), hl         ; bytes per table = count * 8
-        ld hl, 0
-        ld (up_off), hl
         ld a, 1
-        ld (up_state), a
-        ld hl, VR_SAT           ; no sprites while the tiles change
-        call vdp_set_write
-        ld a, SAT_END
-        out (VDP_DATA), a
-        ld a, VDP_R1_ON & ~$40  ; blank the display while tiles change
-        ld c, 1
-        jp vdp_reg
+        ld (up_pending), a
+        ld (redraw_all), a
+        ret
 
-upload_step:
+upload_set:
         ld a, (up_bank)
         call select_bank
-        ld a, (up_state)        ; 1-3 patterns (thirds 0-2), 4-6 colours
-        dec a
-        ld b, a
-        ld hl, VR_PT
-        ld de, 2                ; set header
-        cp 3
-        jr c, .pat
-        sub 3
-        ld hl, VR_CT
-        ld de, 2 + SET_MAX*8
-.pat:   add a, a                ; + third * $800
-        add a, a
-        add a, a
-        add a, h
-        ld h, a
-        push de
-        ld de, (up_off)
-        add hl, de
-        call vdp_set_write
-        pop de
         ld hl, (up_set)
-        add hl, de
-        ld de, (up_off)
-        add hl, de              ; HL = source
-        push hl
-        ld hl, (up_len)         ; remaining = len - off, capped at 512
-        or a
-        sbc hl, de
-        ld de, 512
-        or a
-        sbc hl, de
-        jr c, .last
-        ld bc, 512
-        jr .copy
-.last:  add hl, de
-        ld b, h
-        ld c, l
-.copy:  pop hl
-        push bc
-.loop:  ld a, (hl)
-        out (VDP_DATA), a
-        inc hl
-        dec bc
-        ld a, b
-        or c
-        jr nz, .loop
-        pop bc
-        ld hl, (up_off)
-        add hl, bc
-        ld (up_off), hl
-        ld de, (up_len)
-        or a
-        sbc hl, de
-        jr c, .done
-        ld hl, 0
-        ld (up_off), hl
-        ld a, (up_state)
-        inc a
-        ld (up_state), a
-        cp 7
-        jr c, .done
-        xor a                   ; all six tables written
-        ld (up_state), a
-        inc a
-        ld (redraw_all), a
-        ld a, VDP_R1_ON
+        ld a, (hl)              ; tile count -> 8-byte groups
+        ld (up_len), a
+        ld de, 2 + SET_MAX*8    ; backdrop: the background colour of code 1
+        ld a, (mode)            ; (plain dirt) on the playfield, code 0 on a
+        cp MODE_PLAYFIELD       ; screen
+        jr nz, .c0
+        ld de, 2 + SET_MAX*8 + 8
+.c0:    add hl, de
+        ld a, (hl)
+        and $0F
+        ld c, 7
+        call vdp_reg
+        ld a, VDP_R1_ON & ~$40
         ld c, 1
         call vdp_reg
-.done:  ld a, ARC_HI_BANK
-        jp select_bank
+        ld hl, VR_PT
+        ld de, 2
+        call .table
+        ld hl, VR_CT
+        ld de, 2 + SET_MAX*8
+        call .table
+        xor a
+        ld (up_pending), a
+        call flip_pnt
+        ld a, VDP_R7
+        ld c, 7
+        call vdp_reg
+        ld a, VDP_R1_ON
+        ld c, 1
+        jp vdp_reg
+; HL = VRAM address, DE = offset in the set. Display blanked: no spacing
+; needed between writes.
+.table: call vdp_set_write
+        ld hl, (up_set)
+        add hl, de
+        ld c, VDP_DATA
+        ld a, (up_len)
+        ld e, a
+.g:     outi
+        outi
+        outi
+        outi
+        outi
+        outi
+        outi
+        outi
+        dec e
+        jr nz, .g
+        ret
 
 ; -----------------------------------------------------------------------------
 ; Camera: follow Mr. Do's cell row (arcade X / 16; row 0 = bottom, 12 = top),
@@ -549,7 +584,9 @@ redraw_rows:
         add hl, hl
         add hl, hl
         add hl, hl
-        ld bc, VR_PNT
+        ld a, (pnt_back)
+        ld b, a
+        ld c, 0
         add hl, bc
         call vdp_set_write
         ld a, (cam)             ; native column = 31 - (sy + cam)
@@ -739,11 +776,24 @@ scr_lookup:
 ; A dessert plate (the center prize: bg attribute bit 7 = character bank 1,
 ; tiles 0-47) has a fixed code in every set (tools/gen_tiles.py): returns
 ; carry and A = DESSERT_BASE + tile. Otherwise no carry and D = the TBLB
-; page. Preserves BC, HL; clobbers E.
+; page. Only the plate's 2x2 cells ($1CF/$1D0/$1EF/$1F0, arcade $3057) are
+; checked: other screens (the instructions' tunnel ends) use bank-1 tiles
+; 0-47 too. Preserves BC, HL; clobbers E.
 DESSERT_BASE    equ 176
+PLATE_H         equ high (ARC_VRAM + $400 + $1CF)
+        assert PLATE_H == high (ARC_VRAM + $400 + $1F0)
 not_dirt:
         ld e, a
-        ld a, h                 ; bg attribute is $400 below the bg tile
+        ld a, h
+        cp PLATE_H
+        jr nz, .tblb
+        ld a, l
+        and $DF                 ; $1CF/$1EF -> $CF, $1D0/$1F0 -> $D0
+        cp $CF
+        jr z, .plate
+        cp $D0
+        jr nz, .tblb
+.plate: ld a, h                 ; bg attribute is $400 below the bg tile
         sub 4
         ld h, a
         ld a, (hl)
@@ -769,8 +819,12 @@ drain_queue:
         ld b, DRAIN_MAX
 .next:  ld a, (q_tail)
         ld l, a
-        ld a, (q_head)
-        cp l
+        ld a, (flip_wait)       ; a redraw waiting to be shown takes the
+        or a                    ; cells up to flip_mark; later ones go to
+        ld a, (q_head)          ; the table on screen after the flip
+        jr z, .end
+        ld a, (flip_mark)
+.end:   cp l
         ret z
         ld h, high dirty_q
         ld e, (hl)
@@ -818,8 +872,12 @@ draw_cell:
         ld a, l
         or c
         ld l, a
-        ld a, h
-        add a, high VR_PNT
+        ld a, (flip_wait)       ; the hidden table while it waits to be shown
+        or a
+        ld a, (pnt_front)
+        jr z, .front
+        ld a, (pnt_back)
+.front: add a, h
         ld h, a
         call vdp_set_write
         ld hl, ARC_VRAM + $400

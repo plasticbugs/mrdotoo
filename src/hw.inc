@@ -9,6 +9,7 @@ VDP_CTRL        equ $BF         ; write: address/register, read: status (acks NM
 ; VRAM layout (Screen 2 / Graphics II, full 6KB colour table)
 VR_PT           equ $0000       ; pattern table, 3 thirds x 256 x 8
 VR_PNT          equ $1800       ; name table, 32 x 24
+VR_PNT2         equ $1400       ; second name table (full redraws; free with shared thirds)
 VR_SAT          equ $1B00       ; sprite attribute table, 32 x 4
 VR_CT           equ $2000       ; colour table, 3 thirds x 256 x 8
 VR_SPT          equ $3800       ; sprite pattern table, 64 x 32 (16x16 sprites)
@@ -18,8 +19,8 @@ VDP_R0          equ $02         ; M3 = Graphics II
 VDP_R1_OFF      equ $82         ; 16K, display blanked, VDP interrupt off, 16x16 sprites
 VDP_R1_ON       equ $E2         ; 16K, display on, VDP interrupt (NMI) on, 16x16 sprites
 VDP_R2          equ VR_PNT/$400
-VDP_R3          equ $FF         ; colour table at $2000, full mask
-VDP_R4          equ $03         ; pattern table at $0000, full mask
+VDP_R3          equ $9F         ; colour table at $2000, one 2KB table for all thirds
+VDP_R4          equ $00         ; pattern table at $0000, one 2KB table for all thirds
 VDP_R5          equ VR_SAT/$80
 VDP_R6          equ VR_SPT/$800
 VDP_R7          equ $01         ; border black

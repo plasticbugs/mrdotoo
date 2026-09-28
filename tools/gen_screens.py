@@ -31,7 +31,7 @@ SCREEN_MAX = 224
 HASH_N = 1024
 HASH_BYTES = HASH_N * 5          # keys (4 each) then codes
 PER_BANK = 3
-SCREENS = ["title"]
+SCREENS = ["instruction", "title"]   # first signature match wins: title's logo is on the instruction screen too
 
 
 def load(name):
