@@ -47,7 +47,7 @@ SGM_LOWER       equ $7F         ; $0F: BIOS at $0000-$1FFF, $0D: 8KB RAM there
 ; The LAST 16KB bank of the image is fixed at $8000-$BFFF. Reading $FFC0+n maps
 ; bank n into $C000-$FFFF. Switching code must live in the fixed bank or in RAM.
 MC_HOTSPOT      equ $FFC0
-MC_BANKS        equ 16          ; 256KB image
+MC_BANKS        equ 32          ; 512KB image
 MC_FIXED        equ MC_BANKS-1
 
 ; --- Memory map at run time (see tools/patch_arcade.py) -----------------------------

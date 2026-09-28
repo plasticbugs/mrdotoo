@@ -23,10 +23,17 @@ SETS_PER_BANK   equ 4
 SET_MAX         equ 224
 SET_BYTES       equ 2 + SET_MAX*16
 TBL_BANK        equ 12          ; per colourway: TBLA page, TBLB page; then dirt pairs
+SCR_SET_BANK    equ 15          ; non-gameplay screen tile sets, 4 per bank
+SCR_HASH_BANK   equ 16          ; their cell -> code hashes, 4KB each (3 per bank)
+N_SCREENS       equ (scr_index_end - scr_index) / 4
+MODE_NONE       equ 0
+MODE_PLAYFIELD  equ 1
+MODE_SCREEN     equ 2
 DIRT_PAIRS      equ $C000 + 31*512
 QUEUE_CELLS     equ 128         ; dirty queue: 128 x 2 bytes, one 256-byte page
 DRAIN_MAX       equ 40          ; queued cells drawn per vblank
 REDRAW_ROWS     equ 6           ; rows per vblank during a full redraw
+REDRAW_ROWS_SCR equ 3           ;   (screen mode: hashed lookups)
 PF_ROWS         equ 24
 CAM_TOP         equ 3
 CAM_MID         equ 4
@@ -156,6 +163,10 @@ render_init:
         ld (up_state), a
         ld a, $FF
         ld (cw), a
+        ld (scr), a
+        xor a
+        ld (mode), a
+        ld (cw_valid), a
         ld (cw_attr), a
         ld (cw_tile), a
         ld a, PF_ROWS
@@ -168,18 +179,21 @@ render:
         ld a, (up_state)
         or a
         jp nz, upload_step
-        ld a, (cw)
-        inc a
+        ld a, (mode)
+        or a
         call nz, sprites_update ; first, inside vblank
         call check_colourway
         ld a, (up_state)
         or a
         ret nz
-        ld a, (cw)
-        inc a
+        ld a, (mode)
+        or a
         ret z                   ; no tile set yet
+        cp MODE_SCREEN
         ld a, TBL_BANK
-        call select_bank
+        jr nz, .bank
+        ld a, SCR_HASH_BANK
+.bank:  call select_bank
         call camera_update
         ld a, (redraw_all)
         or a
@@ -210,7 +224,7 @@ check_colourway:
         jr nz, .changed
         ld a, (cw_tile)
         cp c
-        ret z
+        jp z, check_screens
 .changed:
         ld a, b
         ld (cw_attr), a
@@ -235,45 +249,125 @@ check_colourway:
         ld a, d
         cp 31
         jr nz, .search
-        jr .out                 ; not a playfield colourway: keep the current set
-.found: ld a, c
+        xor a                   ; not a playfield colourway
+        ld (cw_valid), a
+        ld a, ARC_HI_BANK
+        call select_bank
+        jp check_screens
+.found: ld a, 1
+        ld (cw_valid), a
+        ld a, c
         ld (dirt_tile), a
         ld a, d
         ld (tbl_page), a        ; tables at $C000 + cw*512: page = $C0 + cw*2
         add a, a
         add a, $C0
         ld (tbl_page), a
+        ld a, (mode)
+        cp MODE_PLAYFIELD
+        jr nz, .new
         ld a, (cw)
         cp d
         jr z, .out              ; same tile set (colourways can share a pair)
-        ld a, d
+.new:   ld a, d
         ld (cw), a
+        ld a, MODE_PLAYFIELD
+        ld (mode), a
+        ld a, d                 ; set cw: bank SET_BANK0 + cw/4, slot cw%4
+        srl a
+        srl a
+        add a, SET_BANK0
+        ld b, a
+        ld a, d
+        call set_address
+        ld a, b
         call upload_start
 .out:   ld a, ARC_HI_BANK
         jp select_bank
 
-; -----------------------------------------------------------------------------
-; Tile set upload: patterns and colours into all three thirds, 512 bytes per
-; vblank with the display blanked, then a full redraw.
-upload_start:
-        ld a, (cw)
-        ld b, a
-        srl a
-        srl a
-        add a, SET_BANK0
-        ld (up_bank), a
-        ld a, b
+; A = slot (0-3) in a set bank -> HL = its address. Preserves B.
+set_address:
         and SETS_PER_BANK-1
         ld hl, $C000
         ld de, SET_BYTES
         or a
-        jr z, .base
+        ret z
 .mul:   add hl, de
         dec a
         jr nz, .mul
-.base:  ld (up_set), hl
-        ld a, (up_bank)
+        ret
+
+; Not a playfield: is it one of the captured screens (tools/gen_screens.py)?
+; Each has a signature: a cell whose fg tile it always shows.
+check_screens:
+        ld a, (cw_valid)
+        or a
+        ret nz
+        ld hl, scr_index
+        ld c, 0
+.next:  ld a, c
+        cp N_SCREENS
+        ret z
+        ld e, (hl)
+        inc hl
+        ld d, (hl)
+        inc hl
+        push hl
+        ld hl, ARC_FG_TILE
+        add hl, de
+        ld a, (hl)
+        pop hl
+        cp (hl)
+        inc hl
+        jr z, .hit
+        inc hl
+        inc c
+        jr .next
+.hit:   ld a, (mode)
+        cp MODE_SCREEN
+        jr nz, .new
+        ld a, (scr)
+        cp c
+        ret z
+.new:   ld a, c
+        ld (scr), a
+        ld a, (hl)
+        ld (cam), a             ; each screen has a fixed camera
+        ld a, MODE_SCREEN
+        ld (mode), a
+        ld a, c                 ; hash base page: $C0 + (scr % 3) * $10
+        ld b, a
+        ld d, $C0
+.h3:    sub 3
+        jr c, .hd
+        jr .h3
+.hd:    add a, 3
+        rlca
+        rlca
+        rlca
+        rlca
+        add a, d
+        ld (scr_hpage), a
+        ld a, b                 ; set: bank SCR_SET_BANK + scr/4, slot scr%4
+        srl a
+        srl a
+        add a, SCR_SET_BANK
+        ld b, a
+        ld a, c
+        call set_address
+        ld a, b
+        jp upload_start
+
+; -----------------------------------------------------------------------------
+; Tile set upload: patterns and colours into all three thirds, 512 bytes per
+; vblank with the display blanked, then a full redraw.
+; A = bank, HL = set address.
+upload_start:
+        ld (up_bank), a
+        ld (up_set), hl
+        push hl
         call select_bank
+        pop hl
         ld a, (hl)              ; tile count
         ld l, a
         ld h, 0
@@ -371,6 +465,9 @@ upload_step:
 ; Camera: follow Mr. Do's cell row (arcade X / 16; row 0 = bottom, 12 = top),
 ; with hysteresis so it only moves at the playfield edges.
 camera_update:
+        ld a, (mode)
+        cp MODE_SCREEN
+        ret z                   ; screens have a fixed camera
         ld a, (PLAYER_FLAGS)
         rla
         ret nc                  ; Mr. Do not active: keep the camera
@@ -423,6 +520,10 @@ camera_update:
 ; Full redraw, REDRAW_ROWS screen rows per call.
 redraw_rows:
         ld b, REDRAW_ROWS
+        ld a, (mode)
+        cp MODE_SCREEN
+        jr nz, .row
+        ld b, REDRAW_ROWS_SCR   ; hashed lookups cost more per cell
 .row:   push bc
         ld a, (rd_row)
         cp PF_ROWS
@@ -447,7 +548,13 @@ redraw_rows:
         ld h, 0
         ld bc, ARC_VRAM + $400 + 4*32   ; bg tile, native row 4
         add hl, bc
+        ld a, (mode)
+        cp MODE_SCREEN
+        jr z, .scr
         call draw_run
+        jr .rowdone
+.scr:   call draw_run_scr
+.rowdone:
         ld a, (rd_row)
         inc a
         ld (rd_row), a
@@ -484,6 +591,94 @@ draw_run:
         jr nc, .nc
         inc h
 .nc:    djnz .cell
+        ret
+
+; Screen mode: the same run, each cell looked up in the screen's hash.
+draw_run_scr:
+        ld b, 24
+.cell:  push bc
+        push hl
+        call scr_lookup
+        out (VDP_DATA), a
+        pop hl
+        ld a, l
+        add a, 32
+        ld l, a
+        jr nc, .nc
+        inc h
+.nc:    pop bc
+        djnz .cell
+        ret
+
+; HL -> bg tile of a cell. Returns A = the screen tile for its (bg attr,
+; bg tile, fg attr, fg tile), or 0 (black) if the capture never saw it.
+; The hash bank is mapped. Clobbers BC, DE, HL.
+scr_lookup:
+        ld a, h
+        sub 4
+        ld h, a
+        ld b, (hl)              ; bg attr
+        add a, 4
+        ld h, a
+        ld c, (hl)              ; bg tile
+        add a, 4
+        ld h, a
+        ld d, (hl)              ; fg attr
+        add a, 4
+        ld h, a
+        ld e, (hl)              ; fg tile
+        ld a, d                 ; h = (fg tile + (fg attr ^ bg tile ^ bg attr)) & 511
+        xor c
+        xor b
+        add a, e
+        ld l, a
+        ld a, 0
+        adc a, 0
+        ld h, a
+.probe: push hl
+        add hl, hl
+        add hl, hl
+        ld a, (scr_hpage)
+        add a, h
+        ld h, a                 ; key = page + h*4
+        ld a, (hl)
+        cp b
+        jr nz, .miss
+        inc l
+        ld a, (hl)
+        cp c
+        jr nz, .miss
+        inc l
+        ld a, (hl)
+        cp d
+        jr nz, .miss
+        inc l
+        ld a, (hl)
+        cp e
+        jr nz, .miss
+        pop hl                  ; found: code at page + $800 + h
+        ld a, (scr_hpage)
+        add a, 8
+        add a, h
+        ld h, a
+        ld a, (hl)
+        ret
+.miss:  pop hl
+        push hl
+        ld a, (scr_hpage)       ; empty slot ends the probe
+        add a, 8
+        add a, h
+        ld h, a
+        ld a, (hl)
+        pop hl
+        cp $FF
+        jr z, .none
+        inc hl
+        ld a, h
+        and 1
+        ld h, a
+        jr .probe
+.none:  xor a
         ret
 
 ; -----------------------------------------------------------------------------
@@ -547,7 +742,13 @@ draw_cell:
         call vdp_set_write
         ld hl, ARC_VRAM + $400
         add hl, de              ; bg tile
-        ld a, (dirt_tile)
+        ld a, (mode)
+        cp MODE_SCREEN
+        jr nz, .pf
+        call scr_lookup
+        out (VDP_DATA), a
+        ret
+.pf:    ld a, (dirt_tile)
         ld c, a
         ld a, (tbl_page)
         ld d, a

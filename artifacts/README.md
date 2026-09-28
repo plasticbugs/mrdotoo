@@ -8,6 +8,7 @@ recordings, one folder per milestone. Files here are committed; `build/` is not.
 | `01-phase0-boot` | CV + SGM + MegaCart skeleton boots; SGM-required screen |
 | `02-phase1-arcade-logic` | The arcade program runs on the ColecoVision (debug text view of the arcade's foreground layer); lockstep-identical to MAME for 3 x 20,000 frames |
 | `03-phase2-renderer` | The real playfield renderer: arcade tiles converted to Screen 2 |
+| `05-title-and-hud` | Title screen via per-screen tile sets; the HUD panel |
 | `04-hack-art-and-multiplexer` | CV-romhack art for monsters, diggers, apples, desserts and cherries; flicker multiplexer; thinned ball burst |
 
 ## 03-phase2-renderer
@@ -24,3 +25,6 @@ recordings, one folder per milestone. Files here are committed; `build/` is not.
 - `tiles-preview-hack-cherries.png`: the romhack's cherries composited over the level dirt.
 - `gameplay-hack-sprites-and-cherries.png`: scripted game with the new art.
 - `ball-burst-half-fragments.png`: the ball's 20-fragment burst drawn as 10 (visual only; the logic still runs all 20). The burst frame's driver cost fell from ~42k to ~19k T-states.
+
+## 05-title-and-hud
+- `title-screen.png`, `title-screen-colour-cycle.png`: the arcade title rendered on the ColecoVision straight after power-on (previously ~8 s of black while the arcade ran its title unseen). Non-gameplay screens use captured per-screen tile sets (tools/capture_screen.py, tools/gen_screens.py) with a hashed cell lookup; the logo's colour cycling animates as on the arcade.

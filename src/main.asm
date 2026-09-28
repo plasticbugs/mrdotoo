@@ -56,6 +56,10 @@ cw_tile:        ds 1
 dirt_tile:      ds 1
 tbl_page:       ds 1            ; TBLA page in the tables bank
 up_state:       ds 1            ; tile upload: 0 idle, 1-6 table in progress
+mode:           ds 1            ; MODE_NONE / MODE_PLAYFIELD / MODE_SCREEN
+cw_valid:       ds 1            ; the playfield corner shows a known colourway
+scr:            ds 1            ; screen index in MODE_SCREEN
+scr_hpage:      ds 1            ; its hash table page in SCR_HASH_BANK
 up_bank:        ds 1
 up_set:         ds 2
 up_len:         ds 2
@@ -132,6 +136,19 @@ repend:         ds 1            ; a vblank arrived while one was being delivered
         org $C000                       ; bank 14: sprite patterns, codes 64-127
         incbin "build/sprites/pat.bin", $2000, $2000
         ds $10000-$, $FF
+
+        org $C000                       ; bank 15: non-gameplay screen tile sets
+        incbin "build/screens/sets.bin"
+        ds $10000-$, $FF
+
+        org $C000                       ; bank 16: their cell -> tile hashes
+        incbin "build/screens/hash.bin"
+        ds $10000-$, $FF
+
+        dup MC_FIXED-17, n              ; banks 17..: free
+        org $C000
+        ds $10000-$, $FF
+        edup
 
 ; =============================================================================
 ; FIXED BANK  ($8000-$BFFF) - last 16KB of the image
@@ -722,6 +739,10 @@ print_vram:
 
 s_nosgm1: db "SUPER GAME MODULE REQUIRED", 0
 s_nosgm2: db "PLEASE CONNECT", 0
+
+scr_index:                              ; per screen: signature cell, fg tile, camera
+        incbin "build/screens/index.bin"
+scr_index_end:
 
 font:   incbin "build/font.bin"
         db $00, $00, $00, $18, $18, $00, $00, $00   ; T_DOT

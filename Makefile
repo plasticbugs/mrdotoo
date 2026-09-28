@@ -1,7 +1,7 @@
 # Mr. Do! arcade port for ColecoVision + SGM
 ROM      := build/mrdo.rom
 SRC      := $(wildcard src/*.asm src/*.inc)
-DATA     := build/font.bin build/arc_lo.bin build/arc_hi.bin build/tiles/sets.bin build/sprites/pat.bin build/sprites/pin.bin
+DATA     := build/font.bin build/arc_lo.bin build/arc_hi.bin build/tiles/sets.bin build/sprites/pat.bin build/sprites/pin.bin build/screens/sets.bin
 DIS      ?= $(HOME)/work/do_disassemble
 OPENMSX  ?= /Applications/openMSX.app/Contents/MacOS/openmsx
 
@@ -17,6 +17,9 @@ build/sprites/pat.bin build/sprites/pin.bin: tools/gen_sprites.py tools/gen_spri
 	python3 tools/gen_sprites.py
 	python3 tools/gen_sprites_hack.py
 
+build/screens/sets.bin: tools/gen_screens.py tools/gen_tiles.py $(wildcard tools/data/screens/*.txt)
+	python3 tools/gen_screens.py
+
 build/codemap.json: tools/codemap.py tools/z80dis.py tools/data/ghidra_functions.txt
 	python3 tools/codemap.py
 
@@ -25,7 +28,7 @@ build/arc_lo.bin build/arc_hi.bin: tools/patch_arcade.py build/codemap.json
 
 $(ROM): $(SRC) $(DATA)
 	sjasmplus --nologo --msg=war -Wno-fileorg --fullpath -Isrc -I. --sym=build/mrdo.sym --lst=build/mrdo.lst src/main.asm
-	@test $$(wc -c < $(ROM)) -eq 262144 || (echo "ROM is not 256KB"; exit 1)
+	@test $$(wc -c < $(ROM)) -eq 524288 || (echo "ROM is not 512KB"; exit 1)
 	@python3 tools/check_rom.py $(ROM)
 
 build/arc_lo_validate.bin: tools/patch_arcade.py build/codemap.json
