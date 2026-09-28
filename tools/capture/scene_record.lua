@@ -1,7 +1,10 @@
--- Cutscene survey recorder: per video frame dump bg/fg video RAM ($8000-$8FFF),
--- sprite RAM share (256B), work RAM $E000-$EFFF; log scroll writes.
--- Env: OUT, FRAMES, SCEN (attract|vg|w|dia|ext|over), POKEF (frame of poke),
---      SNAPEVERY (screenshot period), SNAPFROM
+-- Cutscene recorder (for tools/capture_screen.py scene:PREFIX:f0-f1): per video
+-- frame dump bg/fg video RAM ($8000-$8FFF), sprite RAM share (256B), work RAM
+-- $E000-$EFFF; log scroll writes to PREFIX.scroll.
+-- Env: OUT (prefix), FRAMES, SCEN (attract|vg|w|dia|ext|over), POKEF (frame of
+--      the poke that ends the round into the scene), LETTER (0-4: the EXTRA
+--      letter the alpha monster wears, $E017), SNAPEVERY, SNAPFROM, SNAPTO
+-- Run MAME with SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy -video none -sound none.
 local cpu = manager.machine.devices[":maincpu"]
 local mem = cpu.spaces["program"]
 local out = os.getenv("OUT")
@@ -96,6 +99,7 @@ emu.register_frame_done(function()
         mem:write_u8(0xE097, 1)
         mem:write_u8(0xE098, 0x05); mem:write_u8(0xE099, 0x00); mem:write_u8(0xE09A, 0x00)
       end
+      if os.getenv("LETTER") then mem:write_u8(0xE017, tonumber(os.getenv("LETTER"))) end
       slog:write(string.format("POKE %d %s\n", f, scen))
     end
   end

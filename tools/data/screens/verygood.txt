@@ -1,204 +1,204 @@
-# verygood: captured from vg:1386-1805 (signature unseen in attract.ram:0-4999)
+# verygood: captured from vg0:1386-1805 vg1:1386-1805 vg2:1386-1805 vg3:1386-1805 vg4:1386-1805 (signature unseen in attract.ram:0-4999)
 cam 3
 sig 2da 2d
 band 19 23
-pair 95 b7 00 29 168
-pair 95 b6 00 29 168
-pair 95 b5 00 29 168
-pair 95 b3 95 b7 168
-pair 95 b2 95 b6 168
-pair 95 b1 95 b5 168
-pair 95 af 95 b3 168
-pair 95 ae 95 b2 168
-pair 95 ad 95 b1 168
-pair 95 ab 95 af 168
-pair 95 aa 95 ae 168
-pair 95 a9 95 ad 168
-pair 00 29 95 ab 168
-pair 00 29 95 aa 168
-pair 00 29 95 a9 168
-pair 89 c7 00 29 133
-pair 89 c6 00 29 133
-pair 89 c3 89 c7 126
-pair 89 c2 89 c6 126
-pair 89 bf 89 c3 119
-pair 89 be 89 c2 119
-pair 89 bb 89 bf 112
-pair 89 ba 89 be 112
-pair 00 29 89 bb 105
-pair 00 29 89 ba 105
-pair 00 29 89 b9 105
-pair 00 29 89 b8 105
-pair 89 c7 ff ff 93
-pair 89 c6 ff ff 93
-pair 89 c3 ff ff 92
-pair 89 c2 ff ff 92
-pair 89 bf ff ff 91
-pair 89 be ff ff 91
-pair 91 d7 00 29 91
-pair 91 d6 00 29 91
-pair 91 d5 00 29 91
-pair 91 d4 00 29 91
-pair 89 bb ff ff 90
-pair 89 ba ff ff 90
-pair 89 b9 ff ff 90
-pair 89 b8 ff ff 90
-pair 95 b4 00 29 87
-pair 00 29 95 a8 87
-pair 95 a8 95 ac 87
-pair 91 d7 ff ff 87
-pair 91 d6 ff ff 87
-pair 91 d5 ff ff 87
-pair 91 d4 ff ff 87
-pair 91 d3 ff ff 86
-pair 91 d2 ff ff 86
-pair 91 d1 ff ff 86
-pair 91 d0 ff ff 86
-pair 91 cf ff ff 85
-pair 91 ce ff ff 85
-pair 91 cd ff ff 85
-pair 91 cc ff ff 85
-pair 95 b7 ff ff 84
-pair 95 b6 ff ff 84
-pair 95 b5 ff ff 84
-pair 95 b0 95 b4 84
-pair 95 b3 ff ff 84
-pair 95 b2 ff ff 84
-pair 95 b1 ff ff 84
-pair 15 fa 15 fb 84
-pair 15 fb 15 fc 84
-pair 95 af ff ff 84
-pair 95 ae ff ff 84
-pair 95 ad ff ff 84
-pair 95 ab ff ff 84
-pair 95 aa ff ff 84
-pair 95 a9 ff ff 84
-pair 95 ac 95 b0 84
-pair 91 d3 91 d7 84
-pair 91 d2 91 d6 84
-pair 91 d1 91 d5 84
-pair 91 d0 91 d4 84
-pair 91 cb ff ff 84
-pair 91 ca ff ff 84
-pair 91 c9 ff ff 84
-pair 91 c8 ff ff 84
-pair 89 eb ff ff 83
-pair 89 ea ff ff 83
-pair 89 e9 ff ff 83
-pair 89 e8 ff ff 83
-pair 89 e7 ff ff 83
-pair 89 e6 ff ff 82
-pair 89 e5 ff ff 82
-pair 89 e4 ff ff 82
-pair 89 e3 ff ff 82
-pair 89 e2 ff ff 82
-pair 15 fc 00 29 81
-pair 15 f9 15 fa 81
-pair 00 29 15 f9 81
-pair 89 e1 ff ff 81
-pair 89 e0 ff ff 81
-pair 89 df ff ff 81
-pair 89 de ff ff 81
-pair 89 dd ff ff 81
-pair 89 dc ff ff 80
-pair 89 db ff ff 80
-pair 89 da ff ff 80
-pair 91 cf 91 d3 77
-pair 91 ce 91 d2 77
-pair 91 cd 91 d1 77
-pair 91 cc 91 d0 77
-pair 91 cb 91 cf 70
-pair 91 ca 91 ce 70
-pair 91 c9 91 cd 70
-pair 91 c8 91 cc 70
-pair 89 ef 89 f1 67
-pair 89 f1 00 29 67
-pair 89 ee 89 f0 67
-pair 89 f0 00 29 67
-pair 89 c5 00 29 66
-pair 89 c4 00 29 66
-pair 89 ed 89 ef 63
-pair 89 ec 89 ee 63
-pair 89 eb 00 29 63
-pair 89 ea 91 cb 63
-pair 89 e9 91 ca 63
-pair 89 e8 91 c9 63
-pair 89 e7 91 c8 63
-pair 89 c1 89 c5 59
-pair 89 c0 89 c4 59
-pair 89 b9 89 ed 56
-pair 89 b8 89 ec 56
-pair 89 b9 89 bd 56
-pair 89 bd 89 c1 56
-pair 89 b8 89 bc 56
-pair 89 bc 89 c0 56
-pair 89 e6 89 eb 56
-pair 89 e5 89 ea 56
-pair 89 e4 89 e9 56
-pair 89 e3 89 e8 56
-pair 89 e2 89 e7 56
-pair 89 e1 89 e6 49
-pair 89 e0 89 e5 49
-pair 89 df 89 e4 49
-pair 89 de 89 e3 49
-pair 89 dd 89 e2 49
-pair 89 c5 ff ff 48
-pair 89 c4 ff ff 48
-pair 89 bd ff ff 47
-pair 89 c1 ff ff 47
-pair 89 bc ff ff 47
-pair 89 c0 ff ff 47
-pair 89 ef ff ff 45
-pair 89 f1 ff ff 45
-pair 89 ee ff ff 45
-pair 89 f0 ff ff 45
-pair 15 fb ff ff 44
-pair 15 fc ff ff 44
-pair 89 ed ff ff 44
-pair 89 ec ff ff 44
-pair 15 fa ff ff 43
-pair 15 f9 ff ff 43
-pair 89 dc 89 e1 42
-pair 89 db 89 e0 42
-pair 89 da 89 df 42
-pair 95 a8 ff ff 41
-pair 95 ac ff ff 41
-pair 89 d9 ff ff 41
-pair 89 d8 ff ff 41
-pair 95 b4 ff ff 40
-pair 95 b0 ff ff 40
-pair 89 f3 ff ff 39
-pair 89 f2 ff ff 39
-pair 00 29 89 dc 35
-pair 00 29 89 db 35
-pair 00 29 89 da 35
-pair 89 f3 89 de 25
-pair 89 f2 89 dd 25
-pair 00 29 89 f3 21
-pair 00 29 89 f2 21
-pair 89 d9 89 de 17
-pair 89 d8 89 dd 17
-pair 00 29 89 d9 14
-pair 00 29 89 d8 14
-00 29 00 29 164236
-00 29 09 29 7560
-00 29 09 00 5460
-00 29 09 0e 2514
-00 29 09 2d 1260
-00 29 09 1c 1257
-00 29 09 0c 1257
-00 29 09 17 1257
-00 29 2c 29 840
-00 29 2c 18 840
-00 29 09 01 420
-00 29 09 02 420
-00 29 09 03 420
-00 29 09 05 420
-00 29 09 07 420
-00 29 2c 0e 420
-00 29 2c 1b 420
-00 29 2c 22 420
-00 29 2c 10 420
-00 29 2c 0d 420
-00 29 2c 25 420
-00 29 2c 1f 419
+pair 95 b7 00 29 840
+pair 95 b6 00 29 840
+pair 95 b5 00 29 840
+pair 95 b3 95 b7 840
+pair 95 b2 95 b6 840
+pair 95 b1 95 b5 840
+pair 95 af 95 b3 840
+pair 95 ae 95 b2 840
+pair 95 ad 95 b1 840
+pair 95 ab 95 af 840
+pair 95 aa 95 ae 840
+pair 95 a9 95 ad 840
+pair 00 29 95 ab 840
+pair 00 29 95 aa 840
+pair 00 29 95 a9 840
+pair 89 c7 00 29 665
+pair 89 c6 00 29 665
+pair 89 c3 89 c7 630
+pair 89 c2 89 c6 630
+pair 89 bf 89 c3 595
+pair 89 be 89 c2 595
+pair 89 bb 89 bf 560
+pair 89 ba 89 be 560
+pair 00 29 89 bb 525
+pair 00 29 89 ba 525
+pair 00 29 89 b9 525
+pair 00 29 89 b8 525
+pair 89 c7 ff ff 465
+pair 89 c6 ff ff 465
+pair 89 c3 ff ff 460
+pair 89 c2 ff ff 460
+pair 89 bf ff ff 455
+pair 89 be ff ff 455
+pair 91 d7 00 29 455
+pair 91 d6 00 29 455
+pair 91 d5 00 29 455
+pair 91 d4 00 29 455
+pair 89 bb ff ff 450
+pair 89 ba ff ff 450
+pair 89 b9 ff ff 450
+pair 89 b8 ff ff 450
+pair 95 b4 00 29 435
+pair 00 29 95 a8 435
+pair 95 a8 95 ac 435
+pair 91 d7 ff ff 435
+pair 91 d6 ff ff 435
+pair 91 d5 ff ff 435
+pair 91 d4 ff ff 435
+pair 91 d3 ff ff 430
+pair 91 d2 ff ff 430
+pair 91 d1 ff ff 430
+pair 91 d0 ff ff 430
+pair 91 cf ff ff 425
+pair 91 ce ff ff 425
+pair 91 cd ff ff 425
+pair 91 cc ff ff 425
+pair 95 b7 ff ff 420
+pair 95 b6 ff ff 420
+pair 95 b5 ff ff 420
+pair 95 b0 95 b4 420
+pair 95 b3 ff ff 420
+pair 95 b2 ff ff 420
+pair 95 b1 ff ff 420
+pair 15 fa 15 fb 420
+pair 15 fb 15 fc 420
+pair 95 af ff ff 420
+pair 95 ae ff ff 420
+pair 95 ad ff ff 420
+pair 95 ab ff ff 420
+pair 95 aa ff ff 420
+pair 95 a9 ff ff 420
+pair 95 ac 95 b0 420
+pair 91 d3 91 d7 420
+pair 91 d2 91 d6 420
+pair 91 d1 91 d5 420
+pair 91 d0 91 d4 420
+pair 91 cb ff ff 420
+pair 91 ca ff ff 420
+pair 91 c9 ff ff 420
+pair 91 c8 ff ff 420
+pair 89 eb ff ff 415
+pair 89 ea ff ff 415
+pair 89 e9 ff ff 415
+pair 89 e8 ff ff 415
+pair 89 e7 ff ff 415
+pair 89 e6 ff ff 410
+pair 89 e5 ff ff 410
+pair 89 e4 ff ff 410
+pair 89 e3 ff ff 410
+pair 89 e2 ff ff 410
+pair 15 fc 00 29 405
+pair 15 f9 15 fa 405
+pair 00 29 15 f9 405
+pair 89 e1 ff ff 405
+pair 89 e0 ff ff 405
+pair 89 df ff ff 405
+pair 89 de ff ff 405
+pair 89 dd ff ff 405
+pair 89 dc ff ff 400
+pair 89 db ff ff 400
+pair 89 da ff ff 400
+pair 91 cf 91 d3 385
+pair 91 ce 91 d2 385
+pair 91 cd 91 d1 385
+pair 91 cc 91 d0 385
+pair 91 cb 91 cf 350
+pair 91 ca 91 ce 350
+pair 91 c9 91 cd 350
+pair 91 c8 91 cc 350
+pair 89 ef 89 f1 335
+pair 89 f1 00 29 335
+pair 89 ee 89 f0 335
+pair 89 f0 00 29 335
+pair 89 c5 00 29 330
+pair 89 c4 00 29 330
+pair 89 ed 89 ef 315
+pair 89 ec 89 ee 315
+pair 89 eb 00 29 315
+pair 89 ea 91 cb 315
+pair 89 e9 91 ca 315
+pair 89 e8 91 c9 315
+pair 89 e7 91 c8 315
+pair 89 c1 89 c5 295
+pair 89 c0 89 c4 295
+pair 89 b9 89 ed 280
+pair 89 b8 89 ec 280
+pair 89 b9 89 bd 280
+pair 89 bd 89 c1 280
+pair 89 b8 89 bc 280
+pair 89 bc 89 c0 280
+pair 89 e6 89 eb 280
+pair 89 e5 89 ea 280
+pair 89 e4 89 e9 280
+pair 89 e3 89 e8 280
+pair 89 e2 89 e7 280
+pair 89 e1 89 e6 245
+pair 89 e0 89 e5 245
+pair 89 df 89 e4 245
+pair 89 de 89 e3 245
+pair 89 dd 89 e2 245
+pair 89 c5 ff ff 240
+pair 89 c4 ff ff 240
+pair 89 bd ff ff 235
+pair 89 c1 ff ff 235
+pair 89 bc ff ff 235
+pair 89 c0 ff ff 235
+pair 89 ef ff ff 225
+pair 89 f1 ff ff 225
+pair 89 ee ff ff 225
+pair 89 f0 ff ff 225
+pair 15 fb ff ff 220
+pair 15 fc ff ff 220
+pair 89 ed ff ff 220
+pair 89 ec ff ff 220
+pair 15 fa ff ff 215
+pair 15 f9 ff ff 215
+pair 89 dc 89 e1 210
+pair 89 db 89 e0 210
+pair 89 da 89 df 210
+pair 95 a8 ff ff 205
+pair 95 ac ff ff 205
+pair 89 d9 ff ff 205
+pair 89 d8 ff ff 205
+pair 95 b4 ff ff 200
+pair 95 b0 ff ff 200
+pair 89 f3 ff ff 195
+pair 89 f2 ff ff 195
+pair 00 29 89 dc 175
+pair 00 29 89 db 175
+pair 00 29 89 da 175
+pair 89 f3 89 de 125
+pair 89 f2 89 dd 125
+pair 00 29 89 f3 105
+pair 00 29 89 f2 105
+pair 89 d9 89 de 85
+pair 89 d8 89 dd 85
+pair 00 29 89 d9 70
+pair 00 29 89 d8 70
+00 29 00 29 821180
+00 29 09 29 37800
+00 29 09 00 27300
+00 29 09 0e 12570
+00 29 09 2d 6300
+00 29 09 1c 6285
+00 29 09 0c 6285
+00 29 09 17 6285
+00 29 2c 29 4200
+00 29 2c 18 4200
+00 29 09 01 2100
+00 29 09 02 2100
+00 29 09 03 2100
+00 29 09 05 2100
+00 29 09 07 2100
+00 29 2c 0e 2100
+00 29 2c 1b 2100
+00 29 2c 22 2100
+00 29 2c 10 2100
+00 29 2c 0d 2100
+00 29 2c 25 2100
+00 29 2c 1f 2095
