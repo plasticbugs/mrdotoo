@@ -27,7 +27,10 @@ logo_pn         equ vgl_on + 21 ; the frame's colour list (2)
 logo_po         equ vgl_on + 23 ; the previous frame's (2)
 clw_fr          equ vgl_on + 25 ; clown: diamond frame (0-2)
 clw_step        equ vgl_on + 26 ;   upload step (6 = running)
-        assert clw_step < $2F00
+clw_tcol        equ vgl_on + 27 ;   the token's colour
+        assert clw_tcol < $2F00
+CLW_TOKEN       equ $6D         ; the arcade's credit token (the coin that drops)
+CLW_TPAT        equ 100         ; its pattern: after the romhack's 25 sprites
 
 ; The romhack clown and diamond over the diamond screen (index byte 14 = 2;
 ; tools/gen_screens.py romhack_clown): box screen rows CLW_R0-, columns
@@ -247,7 +250,7 @@ clown_tick:
         ld l, a
         ld h, 0
         ld de, CLW_CHUNK
-        call clown_sat.mul
+        call clown_token.mul
         push hl
         ld de, VR_SPT
         add hl, de
@@ -267,12 +270,27 @@ clown_tick:
         inc (hl)
         ret
 .s5:    jr nz, .run
-        ld a, 6                 ; step 5: frame 0's sprites
-        ld (clw_step), a
+        ld a, 6                 ; step 5: frame 0's sprites, and the arcade
+        ld (clw_step), a        ; token's pattern (flip 0) and colour line
+        ld a, SPR_BANK_B        ; 12 (tools/gen_sprites.py)
+        call select_bank
+        ld hl, VR_SPT + CLW_TPAT * 8
+        call vdp_set_write
+        ld hl, $C000 + (CLW_TOKEN - 64) * 128
+        ld b, 32
+.tp:    ld a, (hl)
+        out (VDP_DATA), a
+        inc hl
+        nop
+        djnz .tp
+        ld a, SPR_BANK_A
+        call select_bank
+        ld a, (SPR_COLOURS + CLW_TOKEN * 16 + 12)
+        ld (clw_tcol), a
         jr clown_sat
 .run:   ld a, (frame_cnt)       ; then a frame every 8 vblanks
         and 7
-        ret nz
+        jp nz, clown_token
         ld a, (clw_fr)
         inc a
         cp 3
@@ -280,19 +298,19 @@ clown_tick:
         xor a
 .f:     ld (clw_fr), a
         ld a, (pnt_front)       ; the box's diamond rows
-        call clown_sat.rows
+        call clown_token.rows
         ld a, (pnt_back)
-        call clown_sat.rows
+        call clown_token.rows
         ; fall through
 ; The current frame's 15 sprites.
 clown_sat:
-        ld hl, VR_SAT
+        ld hl, VR_SAT + 4       ; entries 1-15 (0 is the token's: on top)
         call vdp_set_write
         ld a, (clw_fr)
         ld l, a
         ld h, 0
         ld de, 61
-        call clown_sat.mul
+        call clown_token.mul
         ld de, CLOWN_SAT
         add hl, de
         ld b, 61
@@ -302,6 +320,64 @@ clown_sat:
         nop
         nop
         djnz .s
+        ; fall through
+; SAT entry 0: the arcade's token (the credit coin dropping), wherever its
+; sprite RAM has it, else hidden. First in the SAT so it is drawn over the
+; romhack's sprites and never loses a line to the 4-sprites limit.
+clown_token:
+        ld hl, VR_SAT
+        call vdp_set_write
+        ld hl, ARC_SPRITES
+        ld b, 64
+.e:     inc hl
+        ld a, (hl)              ; Y (0 = end)
+        dec hl
+        or a
+        jr z, .none
+        ld a, (hl)
+        and $7F
+        cp CLW_TOKEN
+        jr z, .got
+        inc hl
+        inc hl
+        inc hl
+        inc hl
+        djnz .e
+.none:  ld a, $D1               ; hidden (below the screen, not the end)
+        out (VDP_DATA), a
+        ret
+.got:   inc hl                  ; screen x = 224 - Y (sprites.asm)
+        ld a, (hl)
+        cpl
+        sub 31
+        ld c, 0
+        jr nc, .x
+        add a, 32               ; (left of the screen: early clock)
+        ld c, $80
+.x:     ld d, a
+        inc hl
+        inc hl
+        ld a, (cam)             ; screen y = 240 - cam * 8 - X - 1
+        add a, a
+        add a, a
+        add a, a
+        neg
+        add a, 239
+        sub (hl)
+        cp SAT_END
+        jr nz, .y
+        inc a
+.y:     out (VDP_DATA), a
+        ld a, d
+        nop
+        out (VDP_DATA), a
+        ld a, CLW_TPAT
+        nop
+        out (VDP_DATA), a
+        ld a, (clw_tcol)
+        or c
+        nop
+        out (VDP_DATA), a
         ret
 ; HL = L * DE (L small).
 .mul:   ld a, l
