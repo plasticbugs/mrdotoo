@@ -83,16 +83,17 @@ sprites_update:
 .next:  ld a, (hl)              ; Y (0 = end of the queue)
         or a
         jp z, .done
-        dec l                   ; ball / ball fragment? (code $70): draw every
-        ld a, (hl)              ; other one, so the 20-fragment burst costs
-        inc l                   ; half; a lone ball is always the first (kept)
-        cp BALL_CODE
+        dec l                   ; ball / ball fragment? (code $70): draw one
+        ld a, (hl)              ; in four, so the 20-fragment burst and re-form
+        inc l                   ; cost a quarter; a lone ball is always the
+        cp BALL_CODE            ; first (kept)
         jr nz, .nb
         ld a, (frag_cnt)
         inc a
         ld (frag_cnt), a
-        and 1
-        jp z, .skip
+        and 3
+        dec a
+        jp nz, .skip
 .nb:    ld a, (hl)              ; Y
         cpl
         sub 31                  ; screen x = 224 - Y

@@ -22,7 +22,7 @@ Arcade-faithful port of Mr. Do! (Universal 1982) to the ColecoVision + Super Gam
 - **4-per-line limit:** this is the TMS9918's own limit; the SGM does not change the video chip. Strategy:
   1. Take objects out of the sprite list where it's cheap: draw grid-aligned static objects (e.g. resting apples) as background tiles, using SGM RAM for the extra tile data.
   2. Multiplex the rest (src/sprites.asm): count sprites per 8-line band; with no band at 5+, the SAT goes out in list order (no flicker at all). Otherwise: pinned sprites first (Mr. Do, codes $00-$26 via build/sprites/pin.bin), then sprites in uncrowded bands (never flicker), then the crowded ones rotated 3 places per frame in arcade order. The full row-cluster sort was tried and cost too much CPU; tools/flicker_sim.py shows crowded-rotate-3 matches it except the 5-in-a-row case.
-  3. Draw every other ball-code ($70) sprite: the ball's 20-fragment burst was ~42k T-states per frame. Visual only; the logic is untouched.
+  3. Draw one in four ball-code ($70) sprites: the ball's 20-fragment burst (and its re-form) was ~42k T-states per frame. Visual only; the logic is untouched.
   4. SAT writes are spaced >= 30 T-states apart because the sprite pass can run past the end of vblank, where the TMS9918 drops faster writes.
 
 ## Arcade execution model (measured in MAME, 2026-09-27)
