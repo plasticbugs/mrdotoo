@@ -33,73 +33,86 @@ sprites_init:
         ld (evict_ptr), a
         ret
 
-; Three short passes at the start of the NMI:
-;  1. resolve each visible arcade sprite into spr_list [y, x, name, colour]
-;     (colour byte: bit 7 early clock, bit 6 pinned, bits 0-3 colour);
-;  2. count list entries per 8-line band;
-;  3. write the SAT: straight through when no band holds five or more,
-;     otherwise pinned first, then uncrowded, then the crowded ones rotated
-;     three places per frame so every sprite on a busy row gets its turn.
+; One pass over arcade sprite RAM at the start of the NMI builds spr_list,
+; already in SAT byte order [y, x, name, colour | early clock], counting each
+; sprite into the three 8-line bands it can touch. Then:
+;  * no band holds five or more: the list goes out as is (order is
+;    irrelevant when no line overflows);
+;  * otherwise pinned sprites (Mr. Do) first, then the ones in uncrowded
+;    bands, then the crowded ones rotated three places per frame so every
+;    sprite on a busy row gets its turn (tools/flicker_sim.py).
 ; The arcade copies its queue to the front of sprite RAM and zeroes Y in every
 ; slot after it, so the scan stops at the first empty slot.
 ;
 ; ent_cache remembers, for the first 32 sprite RAM entries, the code and
-; attribute each last had and the name and colour they resolved to, so a
-; sprite that only moved costs no lookup. Maps SPR_BANK_A; the caller
-; restores the arcade's bank. Uses IX (saved).
+; attribute each last had and the name and colour | pinned they resolved to,
+; so a sprite that only moved costs no lookup. Maps SPR_BANK_A; the caller
+; restores the arcade's bank. Uses the alternate registers (saved).
 ENT_CACHE_N     equ 32
 BANDS           equ 30          ; 8-line bands of (screen y + 16)
 SPR_PINNED      equ $40
+SPR_PIN_MAX     equ 4
 BALL_CODE       equ $70         ; the power ball and its burst fragments
 
 sprites_update:
-        push ix
         ld a, SPR_BANK_A
         call select_bank
-        ld a, (cam)             ; IXH = 240 - cam*8: screen y = IXH - X
+        exx                     ; the arcade uses the alternate set too
+        push bc
+        push de
+        push hl
+        ld h, high band_cnt     ; HL' -> band counters
+        exx
+        ld hl, band_cnt
+        ld de, band_cnt + 1
+        ld bc, BANDS - 1
+        ld (hl), 0
+        ldir
+        ld a, (cam)             ; y base = 240 - cam*8: screen y = base - X
         add a, a
         add a, a
         add a, a
         neg
         add a, 240
-        ld ixh, a
+        ld (spr_ybase), a
         xor a
         ld (frag_cnt), a
+        ld (pin_n), a
         ld hl, ARC_SPRITES + 1  ; -> Y of entry 0
         ld de, spr_list
-; --- pass 1 -------------------------------------------------------------------
 .next:  ld a, (hl)              ; Y (0 = end of the queue)
         or a
-        jp z, .counted
-        dec l                   ; ball / ball fragment? (code $70)
-        ld a, (hl)
-        inc l
+        jp z, .done
+        dec l                   ; ball / ball fragment? (code $70): draw every
+        ld a, (hl)              ; other one, so the 20-fragment burst costs
+        inc l                   ; half; a lone ball is always the first (kept)
         cp BALL_CODE
-        jr nz, .notfrag
-        ld a, (frag_cnt)        ; draw every other one: the burst of 20
-        inc a                   ; fragments costs half, and a lone ball is
-        ld (frag_cnt), a        ; always the first (kept)
+        jr nz, .nb
+        ld a, (frag_cnt)
+        inc a
+        ld (frag_cnt), a
         and 1
         jp z, .skip
-.notfrag:
-        ld a, (hl)              ; Y again (the code check above replaced it)
-        ld ixl, 0               ; IXL = early-clock bit
+.nb:    ld a, (hl)              ; Y
         cpl
-        sub 31                  ; A = 224 - Y = screen x
-        jr nc, .xin
-        cp -31
-        jp c, .skip             ; entirely off the left
-        add a, 32
-        ld ixl, $80
-        jr .xok
-.xin:   cp 192
+        sub 31                  ; screen x = 224 - Y
+        jr c, .ec
+        cp 192
         jp nc, .skip            ; right of the playfield
+        ld b, 0
+        jr .xok
+.ec:    cp -31
+        jp c, .skip             ; entirely off the left
+        add a, 32               ; early clock: the TMS9918 shifts it 32 left
+        ld b, $80
 .xok:   inc e
         ld (de), a              ; x
         dec e
+        ld a, b
+        ld (spr_ec), a
+        ld a, (spr_ybase)
         inc l
-        inc l                   ; -> X
-        ld a, ixh
+        inc l
         sub (hl)                ; screen y (carry: above the window)
         dec l                   ; (dec keeps carry)
         dec l
@@ -113,6 +126,20 @@ sprites_update:
         cp SAT_END
         jp z, .skip
         ld (de), a              ; y
+        exx                     ; count the three bands it can touch
+        add a, 17               ; (screen top + 16 is 1-207, never negative)
+        rrca
+        rrca
+        rrca
+        and $1F
+        add a, low band_cnt
+        ld l, a
+        inc (hl)
+        inc l
+        inc (hl)
+        inc l
+        inc (hl)
+        exx
         dec l                   ; -> code
         ld a, h                 ; cache entry: entries 0-31 only
         cp high ARC_SPRITES
@@ -131,7 +158,7 @@ sprites_update:
         inc l
         ld a, (bc)
         xor (hl)
-        dec l
+        dec l                   ; (dec changes Z: test A again after)
         dec l
         dec c
         or a
@@ -153,17 +180,22 @@ sprites_update:
         inc e
         inc e
         ld a, (bc)
-        ld (de), a
+        ld (de), a              ; name
         inc c
         inc e
-        ld a, (bc)
-        or ixl                  ; early clock
-        ld (de), a
+        ld a, (bc)              ; colour | pinned
+        bit 6, a
+        call nz, spr_pin        ; remember pinned entries (Mr. Do)
+        and $0F
+        ld b, a
+        ld a, (spr_ec)
+        or b
+        ld (de), a              ; colour | early clock
         inc e                   ; next list slot
         inc l                   ; -> Y, as at .next
         ld a, e
         cp low (spr_list + 32*4)
-        jr z, .counted          ; 32 hardware sprites
+        jr z, .done             ; 32 hardware sprites
 .skip:  ld a, l                 ; next entry: HL -> its Y
         add a, 4
         ld l, a
@@ -174,96 +206,86 @@ sprites_update:
         ld a, h
         cp high (ARC_SPRITES + 256)
         jp nz, .next
-; --- pass 2: bands ------------------------------------------------------------
-.counted:
-        pop ix
+.done:  exx
+        pop hl
+        pop de
+        pop bc
+        exx
         ld a, e
         sub low spr_list
         ld (spr_out), a         ; bytes in the list (entries * 4)
         add a, low spr_list
         ld (spr_end), a         ; low byte just past the list
-        ld hl, band_cnt
+        ld hl, band_cnt         ; does any band hold five or more?
         ld b, BANDS
-        xor a
-.clr:   ld (hl), a
-        inc l
-        djnz .clr
-        ld (spr_crowd), a
-        ld hl, spr_list
-.band:  ld a, (spr_end)
-        cp l
-        jr z, sprites_emit
-        ld a, (hl)              ; band = (y + 17) / 8
-        add a, 17
-        rrca
-        rrca
-        rrca
-        and $1F
-        add a, low band_cnt
-        ld e, a
-        ld d, high band_cnt
-        ld b, 3                 ; count the three bands it can touch
-.b3:    ld a, (de)
-        inc a
-        ld (de), a
+.cr:    ld a, (hl)
         cp 5
-        jr c, .b3ok
-        ld (spr_crowd), a       ; some band holds five or more
-.b3ok:  inc e
-        djnz .b3
-        ld a, l
-        add a, 4
-        ld l, a
-        jr .band
+        jp nc, sprites_prio
+        inc l
+        djnz .cr
+        ld hl, VR_SAT           ; no: straight out
+        call vdp_set_write
+        ld a, (spr_out)
+        or a
+        jr z, spr_term
+        ld b, a
+        ld c, VDP_DATA
+        ld hl, spr_list
+.out:   outi                    ; 32 T per byte: safe outside vblank too (the
+        nop                     ; TMS9918 needs ~29 T between accesses during
+        jr nz, .out             ; active display)
+spr_term:
+        ld a, (spr_out)
+        cp 32*4
+        ret z
+        ld a, SAT_END
+        out (VDP_DATA), a
+        ret
 
-; --- pass 3: the SAT -----------------------------------------------------------
-sprites_emit:
+; A = colour | pinned, DE -> the colour byte of this list entry. Records the
+; entry's offset in pin_list. Preserves AF, BC, DE, HL.
+spr_pin:
+        push af
+        push hl
+        ld a, (pin_n)
+        cp SPR_PIN_MAX
+        jr nc, .full
+        inc a
+        ld (pin_n), a
+        dec a
+        add a, low pin_list
+        ld l, a
+        ld h, high pin_list
+        ld a, e
+        sub 3                   ; start of the entry
+        ld (hl), a
+.full:  pop hl
+        pop af
+        ret
+
+; A crowded frame: pinned first, uncrowded next, the crowded ones rotated.
+sprites_prio:
         ld hl, VR_SAT
         call vdp_set_write
-        ld a, (spr_crowd)
+        ld a, (pin_n)           ; 1: pinned
         or a
-        jr nz, .prio
-        ld hl, spr_list         ; no crowded band: order does not matter
-.all:   ld a, (spr_end)
-        cp l
-        jp z, .term
-        call spr_out4
-        ld a, l
-        add a, 4
-        ld l, a
-        jr .all
-.prio:  ld hl, spr_list         ; 1: pinned
-.pin:   ld a, (spr_end)
-        cp l
         jr z, .p2
-        inc l
-        inc l
-        inc l
-        ld a, (hl)
-        dec l
-        dec l
-        dec l
-        and SPR_PINNED
-        call nz, spr_out4
-        ld a, l
-        add a, 4
+        ld b, a
+        ld de, pin_list
+.pin:   ld a, (de)
         ld l, a
-        jr .pin
+        ld h, high spr_list
+        call spr_out4
+        inc e
+        djnz .pin
 .p2:    xor a                   ; 2: uncrowded out, crowded collected
         ld (crowd_n), a
         ld hl, spr_list
 .ent:   ld a, (spr_end)
         cp l
         jr z, .p3
-        inc l
-        inc l
-        inc l
-        ld a, (hl)
-        dec l
-        dec l
-        dec l
-        and SPR_PINNED
-        jr nz, .nx              ; pinned: already out
+        call spr_is_pinned
+        jr z, .nx               ; already out
         ld a, (hl)              ; crowded if one of its bands holds 5+
         add a, 17
         rrca
@@ -306,7 +328,7 @@ sprites_emit:
         jr .ent
 .p3:    ld a, (crowd_n)         ; 3: crowded, rotated three places per frame
         or a
-        jr z, .term
+        jp z, spr_term
         ld b, a
         ld a, (crowd_rot)
         add a, 3
@@ -315,7 +337,7 @@ sprites_emit:
         sub b
         jr .mod
 .rok:   ld (crowd_rot), a
-        ld c, a                 ; C = start index
+        ld c, a
 .rot:   ld a, c
         add a, low crowd_idx
         ld l, a
@@ -329,15 +351,33 @@ sprites_emit:
         jr nz, .rnx
         ld c, 0
 .rnx:   djnz .rot
-.term:  ld a, (spr_out)
-        cp 32*4
-        ret z
-        ld a, SAT_END
-        out (VDP_DATA), a
+        jp spr_term
+
+; HL -> spr_list entry. Z = it is in pin_list. Preserves BC, DE, HL.
+spr_is_pinned:
+        ld a, (pin_n)
+        or a
+        jr z, .no
+        push bc
+        push de
+        ld b, a
+        ld de, pin_list
+.c:     ld a, (de)
+        cp l
+        jr z, .yes
+        inc e
+        djnz .c
+        pop de
+        pop bc
+.no:    or 1                    ; NZ
+        ret
+.yes:   pop de
+        pop bc
+        xor a                   ; Z
         ret
 
 ; HL -> spr_list entry: write its four SAT bytes >= 30 T apart (safe outside
-; vblank), without the pinned bit. Preserves HL.
+; vblank). Preserves HL.
 spr_out4:
         ld a, (hl)
         out (VDP_DATA), a
@@ -355,7 +395,6 @@ spr_out4:
         nop
         nop
         ld a, (hl)
-        and $8F                 ; drop the pinned bit
         out (VDP_DATA), a
         dec l
         dec l

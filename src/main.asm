@@ -39,6 +39,8 @@ ARC_LO_BANK     equ 1           ; arcade $0000-$5FFF in 8KB pieces, banks 1-3
 crowd_idx:      ds CROWD_MAX    ; crowded sprites: spr_list offsets
         assert high crowd_idx == high (crowd_idx + CROWD_MAX - 1)
 scr_last:       ds 5            ; last looked-up screen cell key + its code
+pin_list:       ds SPR_PIN_MAX  ; spr_list offsets of pinned entries
+        assert high pin_list == high (pin_list + SPR_PIN_MAX - 1)
         assert high scr_last == high (scr_last + 4)
 frame_cnt:      ds 2            ; +1 per vblank
 irq_count:      ds 2            ; arcade vblank handler entries
@@ -77,6 +79,8 @@ spr_crowd:      ds 1            ; nonzero: some band holds five or more sprites
 spr_end:        ds 1
 crowd_rot:      ds 1
 frag_cnt:       ds 1            ; ball-code sprites seen this frame
+spr_ec:         ds 1            ; early-clock bit of the sprite being resolved
+pin_n:          ds 1
 key_prev:       ds 1            ; keypad value last frame
 coin_hold:      ds 1            ; frames left to hold the coin line low
 inp_override:   ds 1            ; test scripts: nonzero = use inp_p1/inp_p2 as-is

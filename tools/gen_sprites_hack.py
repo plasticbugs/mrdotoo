@@ -7,15 +7,18 @@ hack (~/work/mrdoarcade/mrdo_core.asm, read-only), rotated/mirrored to the
 arcade facing and shifted so its bounding box sits where the arcade sprite's
 does. Scope (user, 2026-09-27): the hack's ENEMIES (red monsters walking and
 pushing, blue diggers, the apple-squashed monster), APPLES (whole, wobbling,
-breaking) and DESSERTS. Everything else keeps the arcade conversion: Mr. Do
-(the arcade has far more frames), the alpha monster + EXTRA letters, chompers,
-ball + fragments, diamond, score signs, effects.
+breaking) and DESSERTS; added later the same day: the ALPHA (letter) MONSTER.
+Everything else keeps the arcade conversion: Mr. Do (the arcade has far more
+frames), the flattened alpha, chompers, ball + fragments, diamond, score
+signs, effects.
 
 Hack sources used:
   BADGUY_RIGHT_WALK_01/02_PAT, DIGGER_RIGHT_01/02_PAT, BadGuyPushRight_01/02
       plain 32-byte TMS sprites
   EXTRA_SPRITE_COMP  Pletter-0.5c packed, 18 sprites loaded at SPT name 96:
-      E X T R A foot apple half-split split squish diamond ball explode x6
+      E X T R A blank-body apple half-split split squish diamond ball explode x6
+      (hack pattern numbers 96 100 104 108 112 116 120 ...; the commented-out
+      plain copy EXTRA_SPRITE_PAT in mrdo_core.asm holds the same bytes)
   tileset_bitmap/_color (tilesetscr2.asm, Pletter)  Screen 2 tiles: desserts
       (2x2 multicolour) and the cherry quads
 
@@ -65,7 +68,7 @@ CORE = HACK / "mrdo_core.asm"
 TSET = HACK / "tilesetscr2.asm"
 
 EXTRA_NAMES = ["LETTER_E", "LETTER_X", "LETTER_T", "LETTER_R", "LETTER_A",
-               "ALPHA_FOOT", "APPLE", "APPLE_HALF_SPLIT", "APPLE_SPLIT",
+               "ALPHA_BLANK", "APPLE", "APPLE_HALF_SPLIT", "APPLE_SPLIT",
                "SQUISHED", "DIAMOND", "BALL"] + [f"BALL_EXPLODE_{i}" for i in range(6)]
 
 # ---------------------------------------------------------------------------
@@ -318,6 +321,8 @@ APPLE = "EXTRA_SPRITE_COMP#APPLE"
 HALF = "EXTRA_SPRITE_COMP#APPLE_HALF_SPLIT"
 SPLIT = "EXTRA_SPRITE_COMP#APPLE_SPLIT"
 SQUISH = "EXTRA_SPRITE_COMP#SQUISHED"
+LETTER = {ch: f"EXTRA_SPRITE_COMP#LETTER_{ch}" for ch in "EXTRA"}
+BLANK = "EXTRA_SPRITE_COMP#ALPHA_BLANK"
 ALL8 = list(XFORMS)
 
 # group, codes, candidate hack labels, allowed transforms, colour rule.
@@ -338,6 +343,17 @@ MAP = [
     ("apple break frame 1 R", [0x61], [HALF + ".R"], ["id"], "apple"),
     ("apple break frame 2 L", [0x62], [SPLIT + ".L"], ["id"], "apple"),
     ("apple break frame 2 R", [0x63], [SPLIT + ".R"], ["id"], "apple"),
+] + [
+    # alpha monster: arcade code = $4D + letter*3 + frame ($44F8: frame 0 =
+    # letter cut out of the body, legs apart; 1/2 = walking, letter in pen 3,
+    # which the one-colour conversion merges into the body). Hack: letter
+    # sprites 96-112 and the blank body 116 (BYTE_B6CF); frames 1/2 take 116,
+    # mirrored where that matches the arcade's foot, so the walk still shows.
+    (f"alpha {ch} letter", [0x4D + 3 * i], [LETTER[ch]], ["id"], "alpha")
+    for i, ch in enumerate("EXTRA")
+] + [
+    ("alpha walk foot 1", [0x4E + 3 * i for i in range(5)], [BLANK], ["id", "mx"], "alpha"),
+    ("alpha walk foot 2", [0x4F + 3 * i for i in range(5)], [BLANK], ["id", "mx"], "alpha"),
 ]
 # the wobble frames are the resting apple tilted: shift the hack apple from
 # the resting position by the arcade centroid change (+-1 px), so it jiggles
@@ -357,6 +373,8 @@ HUE = {  # arcade-nearest TMS colour -> hack shade
     "digger": {4: 5, 5: 5, 7: 7, 6: 8, 8: 8, 9: 8},
     "apple": {6: 8, 8: 8, 9: 8},
     "squish": {6: 13, 8: 13, 9: 13},
+    # alpha: the hack's two shades (yellow 11, red 8); blues -> light blue 5
+    "alpha": {6: 8, 8: 8, 9: 8, 10: 11, 11: 11, 4: 5, 5: 5},
 }
 FIXED = {  # (rule, line) -> colour, where the hack is explicit
     ("digger", 2): 5, ("digger", 8): 5, ("digger", 11): 5,   # arcade dig lines
@@ -613,7 +631,7 @@ ARCADE_NOTES = {
     0x43: "dessert 6 waffle: no hack art", 0x44: "dessert 7 sandwich: no hack art",
     0x49: "flattened alpha (kept arcade)", 0x4A: "flattened alpha (kept arcade)",
     0x4B: "flattened alpha (kept arcade)", 0x4C: "chomper zapped (kept arcade)",
-    **{c: "alpha monster / EXTRA letter (kept arcade)" for c in range(0x4D, 0x5D)},
+    0x5C: "flattened alpha (kept arcade)",
     0x64: "apple break final frame (halves lying open): no hack art",
     0x65: "apple break final frame (halves lying open): no hack art",
     0x66: "power ball (kept arcade)", 0x67: "squash burst (kept arcade)",
@@ -646,7 +664,7 @@ def write_txt(chosen, usual, flips_seen):
         if code in chosen:
             lbl, xf, sh, s, grp = chosen[code]
             note = ""
-            if s < 0.45 and not grp.startswith("dessert"):
+            if s < 0.45 and not grp.startswith(("dessert", "alpha")):
                 note = "  ** low overlap, check"
             L.append(f"${code:02X} {grp:26s} {lbl} [{xf_text(xf, sh)}] iou {s:.2f} ({seen}){note}")
         else:
@@ -665,7 +683,14 @@ def write_txt(chosen, usual, flips_seen):
           "  placed at offset 0 (the arcade food sprite lines up with its 2x2 plate).",
           "  Full colour: build/tiles/dessert_hack.bin. Using the tiles for the plate makes",
           "  the sprite layers redundant (they coincide with tile pixels).",
-          "  Food 6 waffle ($43) and 7 sandwich ($44) have no hack art: arcade kept."]
+          "  Food 6 waffle ($43) and 7 sandwich ($44) have no hack art: arcade kept.",
+          "- Alpha monster $4D-$5B = $4D + letter*3 + frame (arcade $44F8). Frame 0 (letter",
+          "  cut out of the body) -> hack LETTER_E/X/T/R/A (patterns 96/100/104/108/112);",
+          "  frames 1/2 (walking; the arcade letter there is pen 3, merged into the",
+          "  one-colour body) -> hack blank body 116, mirrored per foot. The arcade only",
+          "  queues colour line 4 (blue) for these: -> light blue 5. Other lines snap",
+          "  reds -> 8 and yellows -> 11 (the hack's two alpha colours). Their iou is low by",
+          "  design: the hack draws an outline body, the arcade a solid one."]
     (OUT / "hack_mapping.txt").write_text("\n".join(L) + "\n")
 
 
