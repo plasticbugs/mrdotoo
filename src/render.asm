@@ -188,6 +188,7 @@ render_init:
         ld (up_black), a
         ld (blank_req), a
         ld (scr_hold), a
+        ld (logo_on), a
         ld (q_head), a
         ld (q_tail), a
         ld (redraw_all), a
@@ -254,6 +255,7 @@ render_body:
         jr .bank
 .scrm:
         call scene_update       ; (a cutscene's scrolling band, if any)
+        call logo_tick          ; (the romhack logo's colour bars, if any)
         ld a, (scr_hbank)
 .bank:  call select_bank
         call camera_update
@@ -577,6 +579,10 @@ check_screens:
         ld (scn_flush2), a
         ld (scn_lastn), a
         ld (scn_fill), a        ; fill its caches first
+        inc hl                  ; entry +14: the romhack logo (logo.asm)
+        ld a, (hl)
+        dec hl
+        call logo_start
         ld a, (hl)              ; entry +13: image bank (0 = none)
         or a
         jr nz, .image
@@ -867,7 +873,13 @@ draw_run_scr:
         ld b, 24
 .cell:  push bc
         push hl
-        call scr_lookup
+        ld a, (rd_row)          ; the romhack logo's cells (logo.asm)
+        ld d, a
+        ld a, 24
+        sub b
+        ld e, a
+        call logo_cell
+        call nc, scr_lookup
         out (VDP_DATA), a
         pop hl
         ld a, l
@@ -1166,7 +1178,21 @@ draw_cell:
         ld a, (mode)
         cp MODE_SCREEN
         jr nz, .pf
-        call scr_lookup
+        push de                 ; the romhack logo's cells (logo.asm):
+        ld a, e                 ; D = screen row, E = column
+        and $1F
+        cpl
+        and $1F
+        ld d, a
+        ld a, (cam)
+        ld e, a
+        ld a, d
+        sub e
+        ld d, a
+        ld e, c
+        call logo_cell
+        pop de
+        call nc, scr_lookup
         out (VDP_DATA), a
         ret
 .pf:    ld a, (dirt_tile)

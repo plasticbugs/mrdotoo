@@ -45,3 +45,4 @@ recordings, one folder per milestone. Files here are committed; `build/` is not.
 - `16-extra-pan/`: EXTRA: the romhack picture from the scene's first frame, its landscape panning 8 tiles in step with the arcade's scroll (CV frames every 0.1 s), and the arcade's pan in MAME for reference.
 - `09-very-good-cutscene/vg_romhack_characters_sequence.png`: the letter monster in arcade tiles, then the romhack's dinosaur, apple and Mr. Do walking in (8-pixel steps) and landing; `vg_ending_to_black_to_level.png`: landed, black while the next level is drawn, scene 4 (0.5 s instead of 3.5 s).
 - `12-sprites/mrdo_death_last_frames_red_white.png`: Mr. Do's last death frames; $26 (halo) was all white (white is its dominant colour), now red with the white overlay like the others.
+- `17-title-logo/`: the romhack's animated "Mr. Do!" logo (colour bars) on the title and above the instruction screen, replacing the arcade logo capture.

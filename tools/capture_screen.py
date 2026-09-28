@@ -16,6 +16,10 @@ tools/gen_screens.py turns into a tile set. Commit the .txt.
 --cells SPEC ...: more frames whose cells the screen needs, left out of the
 signature search (e.g. an opening that other screens share).
 
+--logo R0-R1:C0-C1: screen rows R0-R1, columns C0-C1 show the CV romhack's
+animated logo instead of the arcade's (tools/gen_screens.py, src/logo.asm):
+their cells are left out.
+
 --font: the screen shows text that varies (names, scores): tools/gen_screens.py
 adds every font character in each text colour it uses.
 
@@ -75,6 +79,12 @@ def main():
     args = args[:args.index("--cells")] if "--cells" in args else args
     font = "--font" in args
     args = [a for a in args if a != "--font"]
+    logo = None
+    if "--logo" in args:
+        i = args.index("--logo")
+        r, c = args[i + 1].split(":")
+        logo = tuple(int(x) for x in r.split("-")) + tuple(int(x) for x in c.split("-"))
+        args = args[:i] + args[i + 2:]
     band = None
     if "--band" in args:
         i = args.index("--band")
@@ -113,9 +123,11 @@ def main():
                         continue
                     pairs[left + right] += 1
                     continue
+                cells[o] = v[0xC00 + o]
+                if logo and logo[0] <= row - cam <= logo[1] and logo[2] <= sx <= logo[3]:
+                    continue            # the romhack logo is drawn there instead
                 k = (v[o], v[0x400 + o], v[0x800 + o], v[0xC00 + o])
                 combos[k] += 1
-                cells[o] = v[0xC00 + o]
         if not cells_only:
             const = cells if const is None else {o: t for o, t in const.items() if cells.get(o) == t}
     # signature: a constant fg tile that is not blank, dirt, tunnel or font
@@ -130,6 +142,8 @@ def main():
              f"cam {cam}", f"sig {sig[0]:03x} {sig[1]:02x}"]
     if font:
         lines.append("font")
+    if logo:
+        lines.append(f"logo {logo[0]} {logo[1]} {logo[2]} {logo[3]}")
     if band:
         lines.append(f"band {band[0]} {band[1]}")
         lines += [f"pair {a:02x} {b:02x} {c:02x} {e:02x} {n}" for (a, b, c, e), n in pairs.most_common()]

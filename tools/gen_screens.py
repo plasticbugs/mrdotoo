@@ -66,12 +66,15 @@ INDEX = 16
 def load(name):
     cam, sig, band, cells, pairs = None, None, None, Counter(), Counter()
     font = False
+    logo = None
     fontattr = set()
     for line in (HERE / "data" / "screens" / f"{name}.txt").read_text().splitlines():
         if not line or line[0] == "#":
             continue
         f = line.split()
-        if f[0] == "fontattr":          # every font character in these fg
+        if f[0] == "logo":              # the romhack's logo at these screen
+            logo = tuple(int(x) for x in f[1:5])        # rows/columns
+        elif f[0] == "fontattr":          # every font character in these fg
             fontattr |= {int(x, 16) for x in f[1:]}     # attributes
         elif f[0] == "cam":
             cam = int(f[1])
@@ -88,7 +91,36 @@ def load(name):
     for attr in fontattr:
         for t in FONT_TILES:
             cells[(0, BLANK, attr, t)] += 0
-    return cam, sig, band, cells, pairs, font or band is not None
+    return cam, sig, band, cells, pairs, font or band is not None, logo
+
+
+# The CV romhack's title logo (mrdo_core.asm cvb_ANIMATEDLOGO): Graphics I
+# tiles whose colour is per group of 8 codes; its colour bars animate by
+# pointing the colour table at one of 12 64-byte frames (R3 $80-$85 once,
+# then $86-$8B looping), a frame every 4 vblanks. Here (Screen 2) each logo
+# tile gets fixed code LOGO_BASE + i and its colour is rewritten per frame
+# (src/logo.asm). Block: romhack rows 3-10, columns 6-25 -> LOGO_AT (screen
+# rows 1-8, columns 2-21, over the arcade logo's place).
+LOGO_AT = (1, 8, 2, 21)
+LOGO_SRC = (3, 6)                # romhack row, column of the block's corner
+
+
+def romhack_logo():
+    """-> dict(base, tiles [(pattern, colour)], blob): blob (src/logo.asm) =
+    names 8 x 20 (codes), then 12 frames x LOGO_N colour bytes (one per
+    tile: all 8 rows of a Graphics I tile share it)."""
+    import gen_sprites_hack as H
+    ts = H.pletter(H.db_block(H.CORE, "cvb_TILESET"))
+    pnt = H.pletter(H.db_block(H.CORE, "cvb_PNT"))
+    cf = H.pletter(H.db_block(H.CORE, "colorframes_plt"))
+    rows, cols = LOGO_AT[1] - LOGO_AT[0] + 1, LOGO_AT[3] - LOGO_AT[2] + 1
+    block = [pnt[(LOGO_SRC[0] + r) * 32 + LOGO_SRC[1] + c] for r in range(rows) for c in range(cols)]
+    uniq = sorted(set(block))
+    base = SCREEN_MAX - len(uniq)
+    tiles = [(bytes(ts[t * 8:t * 8 + 8]), bytes([cf[t // 8]]) * 8) for t in uniq]
+    names = bytes(base + uniq.index(t) for t in block)
+    frames = b"".join(bytes(cf[f * 64 + t // 8] for t in uniq) for f in range(12))
+    return {"base": base, "tiles": tiles, "blob": names + frames}
 
 
 def hkey(k):
@@ -171,11 +203,15 @@ def main():
         return out
 
     OUT.mkdir(parents=True, exist_ok=True)
+    lg = romhack_logo()
     banks = Banks()
     entries, sets, hashes = [], [], []
     for name in SCREENS:
-        cam, sig, band, cells, pairs, font = load(name)
+        cam, sig, band, cells, pairs, font, logo = load(name)
         room = min(SCREEN_MAX, 256 - 2 * BAND_SLOTS) if band else SCREEN_MAX   # slots may use 224-255
+        if logo:
+            assert logo == LOGO_AT, f"{name}: logo at {logo}, src/logo.asm expects {LOGO_AT}"
+            room = lg["base"]
         if font:                    # every font character in each colour used
             chars = {}              # for varying text (6+ different characters;
             for k in cells:         # one-off labels such as "5TH" stay as seen)
@@ -207,20 +243,25 @@ def main():
                 h = (h + 1) & (HASH_N - 1)
             keys[h * 4:h * 4 + 4] = bytes(k)
             codes[h] = code[tile_of[k]]
-        blob = bytearray([len(kept), 0])
-        blob += b"".join(p for p, _ in kept) + bytes(8 * (G.MAX - len(kept)))
-        blob += b"".join(c for _, c in kept) + bytes(8 * (G.MAX - len(kept)))
+        if logo:                    # the logo's tiles at their fixed codes
+            pad = [(bytes(8), bytes(8))] * (lg["base"] - len(kept))
+            kept_all = kept + pad + lg["tiles"]
+        else:
+            kept_all = kept
+        blob = bytearray([len(kept_all), 0])
+        blob += b"".join(p for p, _ in kept_all) + bytes(8 * (G.MAX - len(kept_all)))
+        blob += b"".join(c for _, c in kept_all) + bytes(8 * (G.MAX - len(kept_all)))
         assert len(blob) == G.SET_BYTES
         sets.append(blob)
         hashes.append(keys + codes)
-        entries.append((name, cam, sig, band, len(kept), pairs))
+        entries.append((name, cam, sig, band, len(kept), pairs, logo))
         print(f"{name}: {len(cells)} cells -> {len(weight)} tiles, {len(kept)} kept, "
               f"{merged} merged into their nearest; cam {cam}, signature ${sig[0]:03x}=${sig[1]:02x}"
               + (f"; band rows {band[0]}-{band[1]}, {len(pairs)} pairs" if band else ""))
     set_at = [banks.put(b, 4) for b in sets]
     hash_at = [banks.put(h, 3) for h in hashes]
     index = bytearray()
-    for i, (name, cam, sig, band, nkept, pairs) in enumerate(entries):
+    for i, (name, cam, sig, band, nkept, pairs, logo) in enumerate(entries):
         pbank = 0
         if band:
             # One bank: keys (512 x 4) at $C000, ids at $C800, then 64 bytes
@@ -245,11 +286,14 @@ def main():
         nrows = band[1] - band[0] + 1 if band else 0
         assert not band or 0 <= row0 and row0 + nrows <= 24
         index += bytes([sig[0] & 0xFF, sig[0] >> 8, sig[1], cam, sb, sa & 0xFF, sa >> 8,
-                        hb, ha >> 8, row0, nrows, pbank, nkept, IMAGES.get(name, 0), 0, 0])
+                        hb, ha >> 8, row0, nrows, pbank, nkept, IMAGES.get(name, 0),
+                        1 if logo else 0, 0])
     data = banks.data()
     (OUT / "banks.bin").write_bytes(data)
     (OUT / "banks.inc").write_text(f"SCR_BANKS equ {len(data) // BANK}\n")
     (OUT / "index.bin").write_bytes(index)
+    (OUT / "logo.bin").write_bytes(lg["blob"])
+    (OUT / "logo.inc").write_text(f"LOGO_BASE equ {lg['base']}\nLOGO_N equ {len(lg['tiles'])}\n")
     print(f"screens: {len(SCREENS)} in {len(data) // BANK} banks from {SCR_BANK0}")
 
 

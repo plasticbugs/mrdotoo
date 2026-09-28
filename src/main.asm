@@ -914,6 +914,8 @@ font_len equ $-font
         include "sound.asm"
         include "hud.asm"
         include "vgland.asm"
+        include "logo.asm"
+        include "build/screens/logo.inc"
         include "build/tiles/hud.inc"
 
         assert $ <= OPT_BASE
