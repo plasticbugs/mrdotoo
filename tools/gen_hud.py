@@ -12,7 +12,7 @@ like the MSX2 port's:
     rows 5-7 EXTRA box       a drawn frame; one letter per EXTRA letter, its
                              state from the fg attribute of one of its box
                              tiles (col 29 rows 12/14/15/17/18): $2D unlit,
-                             $1A lit, $25 flashing
+                             $1A lit, $25 active (white on blue)
     row 17  SCENE..n         col 2 rows 17-21, 24, 25, 26
     row 19  TOP              col 1 rows 17-19
     row 20  top score        col 1 rows 21-26
@@ -87,14 +87,19 @@ def main():
 
     # EXTRA letters: box tiles draw the frame with pen 1 (yellow) and the
     # letter with pen 2: grey ($2D, not yet collected), yellow ($1A,
-    # collected) or black ($25: the letter blinks). The arcade's grey
+    # collected) or black ($25, the active letter). The arcade's grey
     # (88,88,88) is nearest to TMS black, so the grey is TMS grey 14.
+    # The arcade blacks out the letter the alpha monster carries ($25) and
+    # puts the letter-monster sprite over it; that sprite sits off our
+    # playfield, so the active letter is drawn like it instead: white on the
+    # monster's blue.
     frame_col = G.tms_index(pal[(0x2D & 0x3F) * 4 + 1])
-    letter_col = {0x2D: 14, 0x1A: frame_col, 0x25: 1}
+    letter_col = {0x2D: (14, 1), 0x1A: (frame_col, 1), 0x25: (15, 4)}
     for row, box, font in LETTERS:
         for a in EX_ATTRS:
+            fg, bg = letter_col[a]
             art = fg_pixels(0x09, font)
-            art = [[letter_col[a] if c != 1 else 1 for c in r] for r in art]
+            art = [[fg if c != 1 else bg for c in r] for r in art]
             code[(a, box)] = HUD_BASE + len(glyphs)
             glyphs.append(G.to_screen2(art))
 
