@@ -203,6 +203,8 @@ render_init:
         ld (plate_want), a
         ld (plate_food), a
         ld (hud_next), a
+        ld (score_want), a
+        ld (score_have), a
         xor a
         ld (mode), a
         ld (cw_valid), a
@@ -253,6 +255,10 @@ render_body:
         ld hl, plate_food
         cp (hl)
         call nz, plate_load
+        ld a, (score_want)      ; a dessert's score: its tile
+        ld hl, score_have
+        cp (hl)
+        call nz, score_load
         call hud_scan           ; the next EXTRA letter's marker (hud.asm)
         ld a, TBL_BANK
         jr .bank
@@ -662,6 +668,11 @@ upload_set:
         ld a, (plate_want)
         cp $FF
         call nz, plate_load
+        ld a, $FF               ; (the set put its own tile at SCORE_BASE + 1)
+        ld (score_have), a
+        ld a, (score_want)
+        cp $FF
+        call nz, score_load
         jr .hd
 .noh:   xor a                   ; a screen: no panel (its set overwrote the
         call hud_clear          ; HUD glyphs)
@@ -1030,7 +1041,7 @@ scr_find:
 ; checked: other screens (the instructions' tunnel ends) use bank-1 tiles
 ; 0-47 too. Preserves BC, HL; clobbers E.
 DESSERT_BASE    equ 176
-SCORE_BASE      equ 163         ; dessert score bg tiles $15-$21, attribute 9
+SCORE_BASE      equ 163         ; dessert score: "00" here, the other half at +1
 SCORE_ATTR      equ $09
 PLATE_H         equ high (ARC_VRAM + $400 + $1CF)
         assert PLATE_H == high (ARC_VRAM + $400 + $1F0)
@@ -1073,8 +1084,13 @@ not_dirt:
         sub $15
         cp $22 - $15
         jr nc, .tblb
-        add a, SCORE_BASE
-        scf
+        or a
+        ld a, SCORE_BASE        ; "00"
+        jr z, .s00
+        ld a, e                 ; the other half: loaded into SCORE_BASE + 1
+        ld (score_want), a      ; (hud.asm score_load)
+        ld a, SCORE_BASE + 1
+.s00:   scf
         ret
 .tblb:  inc d
         or a                    ; no carry

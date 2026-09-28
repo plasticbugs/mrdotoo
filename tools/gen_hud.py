@@ -12,9 +12,9 @@ like the MSX2 port's:
     rows 5-7 EXTRA box       a drawn frame; one letter per EXTRA letter, its
                              state from the fg attribute of one of its box
                              tiles (col 29 rows 12/14/15/17/18): $2D unlit,
-                             $1A lit, $25 out (black); the next letter (the
+                             $1A collected (light green), $25 out (black); the next letter (the
                              arcade's letter-monster sprite on the box) white
-                             on blue
+                             (green if collected) on blue
     row 17  SCENE..n         col 2 rows 17-21, 24, 25, 26
     row 19  TOP              col 1 rows 17-19
     row 20  top score        col 1 rows 21-26
@@ -36,7 +36,7 @@ page-aligned for the lookups):
          (0 = blank)
   +$B80  static cells (the box frame): (panel cell, code) pairs, $FF ends
   +$BC0  every mirrored arcade cell (lo, hi), $FF $FF ends (hud_redraw)
-Glyphs past code 255 take HUD_EXTRA (161, 162).
+Glyphs past code 255 take HUD_EXTRA (165-175).
 """
 import os
 import sys
@@ -52,7 +52,8 @@ OUT = ROOT / "build" / "tiles"
 HUD_BASE = 180
 BLANK = 0x29
 CLASSES = {0x09: 1, 0x26: 2, 0x2C: 3, 0x2D: 4, 0x1A: 5, 0x25: 6, 0x08: 7}
-HUD_EXTRA = [161, 162]          # also free in every playfield set (they use <= 160)
+HUD_EXTRA = list(range(165, 176))   # also free in every playfield set: the dessert
+                                    # score shows 163 ("00") and 164 (loaded at pickup)
 DIGITS = list(range(10))
 GLYPHS = {                          # attr -> fg tiles drawn in that colour
     0x09: DIGITS + [0x2E, 0x2F, 0x30, 0x31],            # score, lives
@@ -65,6 +66,8 @@ LETTERS = [(12, 0x4E, 0x0E), (14, 0x52, 0x21), (15, 0x54, 0x1D),
            (17, 0x58, 0x1B), (18, 0x5A, 0x0A)]       # (row, box tile, font tile)
 EX_ATTRS = [0x2D, 0x1A, 0x25]
 BOX_ROW, BOX_X0, BOX_X1 = 5, 0, 6    # frame rows 5-7, columns 0-6 of the panel
+COLLECTED = 3                   # TMS light green: collected letters (user's pick, 2026-09-28;
+                                # the arcade's yellow was too close to the grey and the frame)
 
 
 def gcode(i):
@@ -103,13 +106,16 @@ def main():
     # collected) or black ($25: its letter monster is out). The arcade's grey
     # (88,88,88) is nearest to TMS black, so the grey is TMS grey 14.
     frame_col = G.tms_index(pal[(0x2D & 0x3F) * 4 + 1])
-    letter_col = {0x2D: (14, 1), 0x1A: (frame_col, 1), 0x25: (1, 1)}
+    letter_col = {0x2D: (14, 1), 0x1A: (COLLECTED, 1), 0x25: (1, 1)}
+    lit0 = None
     for row, box, font in LETTERS:
         for a in EX_ATTRS:
             if a == 0x25:                       # out: black, the blank glyph
                 code[(a, box)] = HUD_BASE
                 continue
             fg, bg = letter_col[a]
+            if a == 0x1A and lit0 is None:
+                lit0 = gcode(len(glyphs))
             art = fg_pixels(0x09, font)
             art = [[fg if c != 1 else bg for c in r] for r in art]
             code[(a, box)] = gcode(len(glyphs))
@@ -119,9 +125,13 @@ def main():
     # the box (off our playfield); src/hud.asm finds that sprite and draws
     # the letter with one of these instead: white on the monster's blue.
     marks = gcode(len(glyphs))
-    for row, box, font in LETTERS:
+    for row, box, font in LETTERS:          # not collected yet: white on blue
         art = fg_pixels(0x09, font)
         glyphs.append(G.to_screen2([[15 if c != 1 else 4 for c in r] for r in art]))
+    marks2 = gcode(len(glyphs))
+    for row, box, font in LETTERS:          # collected: its colour on blue
+        art = fg_pixels(0x09, font)
+        glyphs.append(G.to_screen2([[COLLECTED if c != 1 else 4 for c in r] for r in art]))
 
     # frame: lines 2 px thick, placed to hug the letter row
     def frame_tile(top=False, bottom=False, left=False, right=False):
@@ -204,7 +214,9 @@ def main():
     assert len(st) <= 0x40 and 0xBC0 + len(cl) <= len(blob) and n * 8 <= 0x300
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "hud.bin").write_bytes(blob)
-    (OUT / "hud.inc").write_text(f"HUD_N equ {n}\nHUD_MARK equ {marks}\nHUD_EXTRA0 equ {HUD_EXTRA[0]}\n"
+    assert all(gcode(i) - gcode(i - 1) == 1 for i in range(1, len(glyphs)) if gcode(i) not in (HUD_EXTRA[0],))
+    (OUT / "hud.inc").write_text(f"HUD_N equ {n}\nHUD_MARK equ {marks}\nHUD_MARK2 equ {marks2}\n"
+                                 f"HUD_LIT0 equ {lit0}\nHUD_EXTRA0 equ {HUD_EXTRA[0]}\n"
                                  f"HUD_LETTER0 equ {(BOX_ROW + 1) * 8 + BOX_X0 + 1}\n")
     print(f"hud.bin: {n} glyphs (codes {HUD_BASE}-{HUD_BASE + n - 1}), "
           f"frame colour {frame_col}, {len(static)} static cells, {len(cells)} mirrored cells")

@@ -28,7 +28,9 @@ logo_po         equ vgl_on + 23 ; the previous frame's (2)
 clw_fr          equ vgl_on + 25 ; clown: diamond frame (0-2)
 clw_step        equ vgl_on + 26 ;   upload step (6 = running)
 clw_tcol        equ vgl_on + 27 ;   the token's colour
-        assert clw_tcol < $2F00
+score_want      equ vgl_on + 28 ; hud.asm: dessert score tile wanted ($FF: none)
+score_have      equ vgl_on + 29 ;   and the one loaded
+        assert score_have < $2F00
 CLW_TOKEN       equ $6D         ; the arcade's credit token (the coin that drops)
 CLW_TPAT        equ 100         ; its pattern: after the romhack's 25 sprites
 
