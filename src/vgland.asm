@@ -37,7 +37,8 @@ nmi_late        equ vgl_on + 7      ; main.asm: an overrunning NMI owes the VDP 
 img_d           equ vgl_on + 8      ; image.asm: EXTRA pan, tiles left to go
 img_bd          equ vgl_on + 9      ;   the step being built
 img_brow        equ vgl_on + 10     ;   next row of it ($FF: none)
-        assert img_brow < $2F00
+up_black        equ vgl_on + 11     ; render.asm: the next upload's blank frame is black
+        assert up_black < $2F00
 
 ; From scene_update (a screen with a band): NZ while the picture is up (no
 ; band builds then). Starts it once the VERY GOOD scroll has come back to 0

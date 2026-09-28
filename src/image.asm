@@ -332,7 +332,7 @@ img_pan:
         jp img_names
 
 ; Called where a new screen or playfield takes over: if an image was up,
-; clear both name tables and the sprites.
+; clear both name tables and the sprites, and leave the display blanked.
 leave_image:
         call vgl_leave
         ld a, (mode)
@@ -359,10 +359,10 @@ leave_image:
         call sprites_init
         ld a, $FF
         ld (spr_cam), a         ; the next sprite pass runs
-        ld a, VDP_R1_ON
-        ld c, 1
-        call vdp_reg
-        pop hl
+        ld a, VDP_R7            ; stays blanked, black, until the next tile
+        ld c, 7                 ; set is up (upload_set turns it back on):
+        call vdp_reg            ; the cleared names would show the image's
+        pop hl                  ; tile 0 (its grass)
         pop de
         pop bc
         ret

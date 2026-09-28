@@ -25,6 +25,8 @@ SET_BYTES       equ 2 + SET_MAX*16
 TBL_BANK        equ 12          ; per colourway: TBLA page, TBLB page; then dirt pairs
 SCR_BANK0       equ 15          ; non-gameplay screens: sets, hashes, scene data (tools/gen_screens.py)
 SCR_INDEX       equ 16          ; bytes per scr_index entry
+SCR_EXTRA       equ 6           ; tools/gen_screens.py SCREENS order
+SCR_CONGRATS    equ 7
 N_SCREENS       equ (scr_index_end - scr_index) / SCR_INDEX
 MODE_NONE       equ 0
 MODE_PLAYFIELD  equ 1
@@ -184,6 +186,7 @@ render_init:
         ld (vgl_armed), a
         ld (nmi_late), a
         ld (img_d), a
+        ld (up_black), a
         ld (q_head), a
         ld (q_tail), a
         ld (redraw_all), a
@@ -432,6 +435,9 @@ check_colourway:
         cp d
         jr z, .out              ; same tile set (colourways can share a pair)
 .new:   call leave_image
+        ld a, (mode)            ; coming from a screen or an image: the
+        sub MODE_PLAYFIELD      ; upload's blank frame stays black (between
+        ld (up_black), a        ; two playfields it takes the new dirt colour)
         ld a, d
         ld (cw), a
         ld a, MODE_PLAYFIELD
@@ -466,13 +472,6 @@ check_screens:
         ld a, (cw_valid)
         or a
         ret nz
-        ld a, (mode)            ; the EXTRA picture stays up for the whole
-        cp MODE_IMAGE           ; scene (its captured screens are not used)
-        jr nz, .look
-        ld a, (ARC_WORK + $0C7)
-        cp WHY_EXTRA
-        ret z
-.look:
         ld hl, scr_index
         ld c, 0
 .next:  ld a, c
@@ -498,6 +497,11 @@ check_screens:
         jr z, .same
         cp MODE_IMAGE
         jr nz, .new
+        ld a, c                 ; the EXTRA picture stays up until the
+        cp SCR_EXTRA            ; playfield returns: its scene's captured
+        ret z                   ; screens (still matching while the arcade
+        cp SCR_CONGRATS         ; clears them) are not used
+        ret z
 .same:  ld a, (scr)
         cp c
         ret z
@@ -576,6 +580,14 @@ upload_set:
 .c0:    add hl, de
         ld a, (hl)
         and $0F
+        ld c, a
+        ld a, (up_black)        ; (after a screen or image: black)
+        or a
+        jr z, .bd
+        ld c, VDP_R7
+        xor a
+        ld (up_black), a
+.bd:    ld a, c
         ld c, 7
         call vdp_reg
         ld a, VDP_R1_ON & ~$40
