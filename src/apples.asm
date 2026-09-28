@@ -30,7 +30,8 @@ apl_old_n       equ SCN_BUF + 32    ; (apple_sync scratch)
 apl_old         equ SCN_BUF + 33
 apl_sy          equ SCN_BUF + 48    ; screen row being drawn
 apl_rowany      equ SCN_BUF + 49    ;   and whether an apple covers it
-        assert apl_rowany < SCN_BUF + SCN_BUF_MAX
+apl_inval       equ SCN_BUF + 50    ; a tiled apple's cell was drawn again
+        assert apl_inval < SCN_BUF + SCN_BUF_MAX
 
 ; Entering the playfield: no apples tiled yet.
 apple_reset:
@@ -38,12 +39,19 @@ apple_reset:
         ld (apl_new_n), a
         ld (apl_cur_n), a
         ld (apl_rowany), a
+        inc a
+        ld (apl_inval), a
         ret
 
-; From the sprite pass (sprites.asm, .yok): A = the sprite's screen y (its top
-; line), HL -> its Y in sprite RAM, DE -> its list slot (x stored at +1),
-; B = early clock. Carry: a resting apple drawn as tiles (left out of the
-; sprite list). Preserves DE, HL; clobbers BC.
+; From the sprite pass (sprites.asm, .yok), for an apple-code sprite: A =
+; the sprite's screen y (its top line), HL -> its Y in sprite RAM, DE -> its
+; list slot (x stored at +1), B = early clock. Carry: a resting apple drawn
+; as tiles (left out of the sprite list). Preserves DE, HL; clobbers BC.
+; An apple tiled last pass at the same place and list index skips the dirt
+; check unless one of the tiled apples' cells has been drawn since
+; (apple_at sets apl_inval: the renderer redraws every cell the arcade
+; writes, so a change under an apple always passes there).
+        assert high apl_new == high (apl_cur + 2 * APL_MAX)
 apple_try:
         push af
         ld a, (mode)
@@ -52,12 +60,6 @@ apple_try:
         ld a, b
         or a
         jr nz, .no              ; (left of the screen)
-        dec l
-        ld a, (hl)              ; code
-        inc l
-        and $7F
-        cp APPLE_CODE
-        jr nz, .no
         inc l
         ld a, (hl)              ; colour line 5, not flipped
         dec l
@@ -72,11 +74,13 @@ apple_try:
         ld a, c
         cp 177
         jr nc, .no              ; (its lower cells below the playfield)
+        rrca                    ; (low 3 bits clear: exactly y / 8)
         rrca
         rrca
-        rrca
-        and $1F
-        ld b, a                 ; B = ty (screen row)
+        ld b, a
+        ld a, (cam)             ; rows are kept camera-free (+ cam): a camera
+        add a, b                ; move in the same vblank then cannot shift
+        ld b, a                 ; a tiled apple by a row. B = list row
         inc e
         ld a, (de)              ; x
         dec e
@@ -89,78 +93,98 @@ apple_try:
         rrca
         rrca
         rrca
-        and $1F
         ld c, a                 ; C = tx
+        push hl
         ld a, (apl_new_n)
         cp APL_MAX
-        jr nc, .no
-        push de
-        push hl
-        call apl_dirt4
-        pop hl
-        pop de
-        jr nz, .no
-        push hl
-        ld a, (apl_new_n)
+        jr nc, .no2
+        add a, a
+        ld l, a                 ; L = entry offset
+        ld a, (apl_inval)
+        or a
+        jr nz, .chk
+        ld a, (apl_cur_n)
+        add a, a
+        cp l
+        jr z, .chk              ; (no entry this far in last pass's list)
+        jr c, .chk
+        ld a, l
+        add a, low apl_cur
         ld l, a
-        inc a
-        ld (apl_new_n), a
-        ld h, 0
-        add hl, hl
-        push de
-        ld de, apl_new
-        add hl, de
+        ld h, high apl_cur
+        ld a, (hl)
+        cp c
+        jr nz, .chk
+        inc l
+        ld a, (hl)
+        cp b
+        jr z, .add
+.chk:   push de
+        call apl_dirt4
         pop de
+        jr nz, .no2
+.add:   ld hl, apl_new_n
+        ld a, (hl)
+        inc (hl)
+        add a, a
+        add a, low apl_new
+        ld l, a
+        ld h, high apl_new
         ld (hl), c
-        inc hl
-        ld a, (cam)             ; rows are kept camera-free (+ cam): a camera
-        add a, b                ; move in the same vblank then cannot shift
-        ld (hl), a              ; a tiled apple by a row
+        inc l
+        ld (hl), b
         pop hl
         pop af
         scf
         ret
+.no2:   pop hl
 .no:    pop af
         or a
         ret
 
-; B = ty, C = tx: Z if the 4 cells are plain dirt (the colourway's dirt bg
-; tile, nothing in front). Preserves BC.
+; B = list row (screen row + cam), C = tx: Z if the 4 cells are plain dirt
+; (the colourway's dirt bg tile, nothing in front). Screen row + 1 is native column - 1 and screen
+; column + 1 native row + 1, so the cells are HL, HL - 1, HL + 31, HL + 32
+; (ty <= 22: no column wrap). Preserves BC.
 apl_dirt4:
-        ld d, 0                 ; D = dy, E = dx
-.r:     ld e, 0
-.c:     ld a, c
-        add a, e
-        push de
-        ld e, a                 ; sx
-        ld a, b
-        add a, d                ; sy
-        call apl_cell           ; HL = cell
-        pop de
-        push de
+        push bc
+        ld e, c
+        ld a, (cam)
+        neg
+        add a, b                ; screen row
+        call apl_cell           ; HL = the top-left cell
         ld de, ARC_VRAM + $400
         add hl, de
         ld a, (dirt_tile)
-        cp (hl)
+        ld c, a
+        ld de, 32
+        call .one
         jr nz, .out
+        dec hl                  ; HL - 1
+        call .one
+        jr nz, .out
+        add hl, de              ; HL + 31
+        call .one
+        jr nz, .out
+        inc hl
+        call .one
+.out:   pop bc
+        ret
+; HL -> a cell's bg tile, C = the dirt tile: Z if plain dirt. Preserves
+; HL, DE, C.
+.one:   ld a, (hl)
+        cp c
+        ret nz
         ld a, h
         add a, 8                ; fg tile layer
         ld h, a
-        ld a, (hl)
+        ld b, (hl)
+        sub 8
+        ld h, a
+        ld a, b
         cp DIRT_FG              ; (undug dirt's fg tile)
-        jr z, .out
+        ret z
         cp BLANK_BG             ; (or nothing in front)
-.out:   pop de
-        ret nz
-        inc e
-        ld a, e
-        cp 2
-        jr c, .c
-        inc d
-        ld a, d
-        cp 2
-        jr c, .r
-        xor a
         ret
 
 ; E = screen column, A = screen row -> HL = native cell (row * 32 + column).
@@ -220,6 +244,7 @@ apple_at:
         pop af
         add a, c
         add a, APPLE_BASE
+        ld (apl_inval), a       ; (non-zero)
         pop hl
         pop bc
         scf
@@ -271,6 +296,8 @@ apple_sync:
         ld a, (mode)
         cp MODE_PLAYFIELD
         ret nz
+        xor a                   ; (redraws below set it again)
+        ld (apl_inval), a
         ld hl, apl_new_n        ; same list as on screen? (the usual case)
         ld de, apl_cur_n
         ld a, (hl)

@@ -146,8 +146,17 @@ sprites_update:
         jr .yok
 .yneg:  cp -15
         jp c, .skip
-.yok:   call apple_try          ; a resting apple drawn as tiles?
+.yok:   ld c, a                 ; an apple? (code check here: the call
+        dec l                   ; for every sprite cost ~3k T a vblank)
+        ld a, (hl)
+        inc l
+        and $7F
+        cp APPLE_CODE
+        ld a, c
+        jr nz, .noapl
+        call apple_try          ; a resting apple drawn as tiles?
         jp c, .skip             ; (apples.asm)
+.noapl:
         dec a                   ; the TMS9918 draws one line below Y
         cp SAT_END
         jp z, .skip
