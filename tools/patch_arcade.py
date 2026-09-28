@@ -233,6 +233,9 @@ def special_patches():
 OPT_BASE = 0xBD00
 OPT_SND_SLOT = OPT_BASE + 0
 OPT_SPR_COPY = OPT_BASE + 3
+# (the same skipper for trigger_apple_wobble ($80) and chomper_scan_apple
+# ($80-$B7) measured slower: those states are common, so it rarely skips)
+OPT_SCAN = [(0x420D, 0x41EC, 0x4211, OPT_BASE + 6, "alpha_advance: next object in state $98")]
 
 
 def speed_patches():
@@ -256,6 +259,27 @@ def speed_patches():
     code += bytes([0x5AAF - (0x5A90 + len(code) + 1)])
     code += bytes([0x00] * (0x5AAF - 0x5A90 - len(code)))
     put_bytes(0x5A90, code, "sound tick: fast idle-slot scan (opt_snd_slot)")
+    # $028B: after copying the queue to sprite RAM, the arcade zeroes Y in
+    # every unused entry (~31 T each). No CPU code reads sprite RAM (MAME read
+    # tap over 8000 frames of play), and the renderer stops at the first Y = 0,
+    # so one terminator does. Registers and flags end as the loop left them:
+    # HL = $9101 (CV $6A51), DE = 4, B = 0, A = 0, flags of `xor a` (the last
+    # `add hl,de` to $9101 sets neither H nor C).
+    assert ORIG[0x028B:0x0297] == bytes.fromhex("47eb23110400af771910fcc9")
+    put_bytes(0x028B, bytes([0xEB, 0x23, 0xAF, 0x77,           # ex de,hl / inc hl / xor a / ld (hl),a
+                             0x21, 0x51, 0x6A,                 # ld hl,$9101 (CV $6A51)
+                             0x11, 0x04, 0x00,                 # ld de,4
+                             0x47, 0xC9]),                     # ld b,a / ret
+              "sprite RAM: one Y=0 terminator instead of zeroing every unused entry")
+    # Object-table scans (12 objects, stride 7, IY-indexed, ~66 T an object):
+    # the loop tail `add iy,de / djnz body` jumps to a skipper that runs the
+    # same two instructions (the exit keeps its flags), then passes over
+    # objects that cannot match via HL and re-enters the body at the next
+    # candidate. The last object always goes through the original body.
+    for tail, body, exit_, entry, why in OPT_SCAN:
+        assert ORIG[tail:tail + 2] == b"\xfd\x19" and ORIG[tail + 2] == 0x10
+        assert tail + 4 + (ORIG[tail + 3] - 256) == body and ORIG[exit_:exit_ + 2] == b"\xfd\xe1"
+        put_bytes(tail, bytes([0xC3, entry & 0xFF, entry >> 8, 0x00]), f"{why} (opt skipper)")
     # The handler's sprite RAM copy ($026D, called when $E001 bit 7 is set):
     # through opt_spr_copy, which also tells the renderer there is new
     # sprite data (vblanks without any skip the sprite pass).
