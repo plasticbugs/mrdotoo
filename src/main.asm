@@ -88,6 +88,8 @@ inp_p1:         ds 1            ; arcade $A000 value while overridden
 inp_p2:         ds 1            ; arcade $A001 value while overridden
 scratch_de:     ds 2            ; irq_after_ei
 repend:         ds 1            ; a vblank arrived while one was being delivered
+pf_starve:      ds 1            ; held vblanks delivered back to back
+pf_drops:       ds 2            ; vblanks skipped so the pathfinder could run
         assert $ <= DRV_RAM_END
 
         ifdef VALIDATE
@@ -309,6 +311,7 @@ rst_vectors:
 ; $0008 hook, reached by rst $08 (every arcade `ei`). The byte at $0009 picks
 ; the path, so the NMI can switch it with one (atomic) write.
 HOOK_SEL        equ $0009
+PF_STARVE_MAX   equ 3               ; skip every 3rd back-to-back held vblank
 HOOK_PENDING    equ $0C - $0A       ; jr offset to the jp take_irq
 ei_hook:
         jr $+2                  ; $0008: offset byte at $0009 (0 = plain)
@@ -367,10 +370,12 @@ nmi:
         inc sp
         xor a
         ld (HOOK_SEL), a        ; delivering now: nothing left pending
+        ld (pf_starve), a
         jp irq_after_ei
 .direct:
         xor a                   ; a vblank held earlier is delivered now
         ld (HOOK_SEL), a
+        ld (pf_starve), a       ; the background code ran: not starved
         pop hl                  ; take it now: the interrupted PC is on the
         pop de                  ; stack, exactly where an IRQ would put it
         pop bc
@@ -434,8 +439,28 @@ take_irq:
         ld (repend), a
         ld a, HOOK_PENDING
         ld (HOOK_SEL), a
-.none:  pop af
-        ; fall through
+.none:
+        IFNDEF VALIDATE         ; (validation delivers every vblank, as MAME)
+        ld a, (pf_starve)       ; held vblanks delivered back to back, with
+        inc a                   ; no time for the background code between
+        cp PF_STARVE_MAX        ; them? When the handler overruns every
+        jr nc, .skip            ; frame, the pathfinder it leaves running
+        ld (pf_starve), a       ; never gets an instruction in and the
+        pop af                  ; monsters/chompers never get a route.
+        jr irq_after_ei
+.skip:  xor a                   ; Skip this vblank: the background runs
+        ld (pf_starve), a       ; until the next NMI (which enters the
+        push hl                 ; handler directly).
+        ld hl, (pf_drops)
+        inc hl
+        ld (pf_drops), hl
+        pop hl
+        pop af
+        ei
+        ret                     ; (sp) = the instruction after the `ei`
+        ELSE
+        pop af
+        ENDIF
 
 ; Take the vblank the way a Z80 would after `ei`: only once the NEXT
 ; instruction has run. On entry (sp) = R, the address of that instruction.

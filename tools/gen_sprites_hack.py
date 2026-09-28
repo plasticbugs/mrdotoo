@@ -587,7 +587,9 @@ def main():
             for ln in range(16):
                 col[code * 16 + ln] = colour(rule, ln, arc_col[code * 16 + ln])
 
-    # desserts: sprite $3D+food = the hack dessert's 2 main colours, offset 0
+    # desserts: the full-colour hack tiles draw the whole dessert (see
+    # tools/gen_tiles.py), so the sprite $3D+food is left empty; drawing both
+    # garbled it. The two-layer split stays in the review sheet.
     dgrids, dfile = dessert_tiles(pt, ct)
     for food, q in dgrids.items():
         code = 0x3D + food
@@ -595,11 +597,9 @@ def main():
         for fl in range(4):
             key = code * 4 + fl
             g, o = arcade_flip(main_, fl & 1, fl >> 1), arcade_flip(over, fl & 1, fl >> 1)
-            pat[key * 32:key * 32 + 32] = tms_sprite_bytes(g)
-            overlay[key * 32:key * 32 + 32] = tms_sprite_bytes(o)
+            pat[key * 32:key * 32 + 32] = bytes(32)
             layers[key] = (g, o)
         col[code * 16:code * 16 + 16] = bytes([c1]) * 16
-        ovcol[code] = c2
         name, pos = DESSERTS[food]
         chosen[code] = (f"tileset {name} @{pos[0]},{pos[1]}", "id", (0, 0),
                         iou(main_, masks[code * 4]), f"dessert {food}")

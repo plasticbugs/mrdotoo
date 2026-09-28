@@ -122,6 +122,7 @@ def main():
     # view; background colour 0 = let the dirt show through.
     # Off by default (user, 2026-09-27): the cherries stay exactly as the
     # arcade draws them, so arcade-only tile glitches stay reproducible.
+    dessert_hack = (ROOT / "build" / "tiles" / "dessert_hack.bin").read_bytes()
     hack = ROOT / "build" / "tiles" / "cherry_hack.bin"
     cherry = {}
     if USE_HACK_CHERRIES and hack.exists():
@@ -193,8 +194,16 @@ def main():
         while len(pats) < DESSERT_BASE:
             pats.append(bytes(8))
             cols.append(bytes([0x11] * 8))
+        # Foods with romhack art use its full-colour 2x2 tiles, and their
+        # sprite is left empty (tools/gen_sprites_hack.py): the arcade's plate
+        # plus sprite pair drawn as two 2-colour layers garbled the dessert.
         seqtbl = ROM[0x320D:0x3219]
         for t in range(48):
+            h = dessert_hack[t * 16:t * 16 + 16]
+            if any(h):
+                pats.append(h[:8])
+                cols.append(h[8:])      # colour 0 shows the black backdrop
+                continue
             attr = seqtbl[t // 4]
             pats_cols = compose((attr, t), BLANK[1], 0)
             pats.append(pats_cols[0])
