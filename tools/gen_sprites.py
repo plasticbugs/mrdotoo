@@ -32,6 +32,7 @@ from gen_tiles import TMS, tms_index  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "build" / "sprites"
 BLACK = 1
+MR_DO_CODES = set(range(0, 38))   # walk / push / dig / death frames (sheet rows 0-2)
 
 
 def usual_lines():
@@ -100,6 +101,9 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "pat.bin").write_bytes(pat)
     (OUT / "col.bin").write_bytes(col)
+    # Mr. Do's codes are pinned: always first in the SAT, never rotated out.
+    pin = bytearray(0x40 if c in MR_DO_CODES else 0 for c in range(128))
+    (OUT / "pin.bin").write_bytes(pin)
 
     S, cell = 4, 16 * 4 + 6
     cv = Canvas(16 * cell + 6, 8 * cell + 6, bg=(40, 40, 40))

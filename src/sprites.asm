@@ -14,6 +14,7 @@
 SPR_BANK_A      equ 13          ; patterns for codes 0-63, and the colour table
 SPR_BANK_B      equ 14          ; patterns for codes 64-127
 SPR_COLOURS     equ $E000       ; in SPR_BANK_A: 128 codes x 16 colour lines
+SPR_PIN         equ $E800       ; in SPR_BANK_A: 128 x (SPR_PINNED or 0)
 VR_SPRMAP       equ $1C00       ; key -> slot+1 (0 = not cached)
 SPR_SLOTS       equ 64
 
@@ -32,15 +33,22 @@ sprites_init:
         ld (evict_ptr), a
         ret
 
-; Write the SAT straight from arcade sprite RAM. Runs first in the NMI,
-; inside vblank. The arcade copies its queue to the front of sprite RAM and
-; zeroes Y in every slot after it, so the scan stops at the first empty slot.
+; Two passes, both inside vblank at the start of the NMI:
+;  1. resolve every visible arcade sprite into spr_list [y, x, name, colour]
+;     and count sprites per 8-line band;
+;  2. sprites_emit writes the SAT in priority order (see there).
+; The arcade copies its queue to the front of sprite RAM and zeroes Y in every
+; slot after it, so the scan stops at the first empty slot.
 ;
 ; ent_cache remembers, for each of the first 32 sprite RAM entries, the code
-; and attribute it last had and the SAT name and colour they resolved to, so
-; a sprite that only moved costs no pattern or colour lookup.
-; Maps SPR_BANK_A; the caller restores the arcade's bank.
+; and attribute it last had and the name and colour they resolved to, so a
+; sprite that only moved costs no pattern or colour lookup.
+; Colour byte: bit 7 early clock, bit 6 pinned (drawn first, never rotated),
+; bits 0-3 colour. Maps SPR_BANK_A; the caller restores the arcade's bank.
 ENT_CACHE_N     equ 32
+BANDS           equ 28          ; 8-line bands; band 2 = screen lines 0-7
+SPR_PINNED      equ $40
+
 sprites_update:
         ld a, SPR_BANK_A
         call select_bank
@@ -53,13 +61,17 @@ sprites_update:
         ld (spr_ybase), a
         xor a
         ld (spr_out), a
-        ld hl, VR_SAT
-        call vdp_set_write
+        ld (spr_crowd), a
+        ld hl, band_cnt
+        ld b, BANDS
+.clr:   ld (hl), a
+        inc hl
+        djnz .clr
         ld hl, ARC_SPRITES
 .next:  inc l                   ; -> Y (entries are 4-aligned: no carry)
         ld a, (hl)
         or a
-        jp z, .end              ; Y = 0: end of the queue
+        jp z, sprites_emit      ; Y = 0: end of the queue
         ld c, a
         ld a, 224               ; screen x = 224 - Y
         sub c
@@ -119,23 +131,63 @@ sprites_update:
 .nocache:
         ld de, spr_tmp          ; resolve into a scratch entry
         call sprite_resolve
-.hit:   ld a, (spr_y)           ; out: y, x, name, colour | early clock
-        out (VDP_DATA), a
+.hit:   push hl                 ; append the SAT bytes to spr_list
+        ld a, (spr_out)
+        add a, a
+        add a, a
+        add a, low spr_list
+        ld l, a
+        ld h, high spr_list
+        ld a, (spr_y)
+        ld (hl), a
+        inc l
+        ld (hl), c
+        inc l
+        inc e
+        inc e
+        ld a, (de)
+        ld (hl), a
+        inc l
+        inc e
+        ld a, (de)
+        ld c, a                 ; C = colour | pinned
+        and $0F
+        or b                    ; early clock
+        ld (hl), a
+        ld a, (spr_y)           ; band of the top line: (y + 17) / 8, where
+        add a, 17               ; y+17 = screen top + 16 is 1-207
+        rrca
+        rrca
+        rrca
+        and $1F
+        ld b, a
+        ld a, (spr_out)         ; meta = band | pinned (bit 7)
+        add a, low spr_meta
+        ld l, a
+        ld h, high spr_meta
         ld a, c
-        out (VDP_DATA), a
-        inc e
-        inc e
-        ld a, (de)
-        out (VDP_DATA), a
-        inc e
-        ld a, (de)
+        add a, a                ; bit 6 -> bit 7
+        and $80
         or b
-        out (VDP_DATA), a
+        ld (hl), a
+        ld a, b                 ; count the three bands it can touch
+        add a, low band_cnt
+        ld l, a
+        ld h, high band_cnt
+        ld b, 3
+.cnt:   inc (hl)
+        ld a, (hl)
+        cp 5
+        jr c, .cok
+        ld (spr_crowd), a       ; some band holds five or more
+.cok:   inc l
+        djnz .cnt
+        pop hl
         ld a, (spr_out)
         inc a
         ld (spr_out), a
         cp 32
-        jr z, .full             ; 32 hardware sprites
+        jp z, sprites_emit      ; 32 hardware sprites
 .skip:  ld a, l                 ; next entry (HL anywhere inside this one)
         or 3
         inc a
@@ -147,13 +199,234 @@ sprites_update:
         ld a, h
         cp high (ARC_SPRITES + 256)
         jp nz, .next            ; all 64 entries done
-.end:   ld a, SAT_END
+        ; fall through
+
+; -----------------------------------------------------------------------------
+; Write the SAT from spr_list, in priority order. The TMS9918 shows only the
+; first four sprites (in SAT order) on any scanline, so:
+;   1. pinned sprites (Mr. Do) always come first;
+;   2. sprites whose bands never hold more than four are safe anywhere;
+;   3. the rest, sorted by y and grouped where they overlap, rotate within
+;      their group by four places every frame, so everyone on a crowded row
+;      gets a fair share (tools/flicker_sim.py: "row clusters").
+sprites_emit:
+        ld hl, VR_SAT
+        call vdp_set_write
+        ld a, (spr_out)
+        or a
+        jp z, .term
+        ld a, (spr_crowd)
+        or a
+        jr nz, .prio
+        ld a, (spr_out)         ; no crowded line: order does not matter
+        add a, a
+        add a, a
+        ld b, a
+        ld hl, spr_list
+.all:   ld a, (hl)              ; 37 T per byte: safe outside vblank too
+        out (VDP_DATA), a       ; (the TMS9918 needs ~29 T between accesses
+        inc hl                  ;  during active display)
+        djnz .all
+        jr .term
+.prio:  xor a
+        ld (crowd_n), a
+        ld a, (spr_out)         ; 1: pinned entries
+        ld b, a
+        ld de, spr_meta
+        ld hl, spr_list
+.pin:   ld a, (de)
+        rla
+        call c, spr_out4
+        inc e
+        ld a, l
+        add a, 4
+        ld l, a
+        djnz .pin
+        ld a, (spr_out)         ; 2: safe entries out, crowded ones collected
+        ld b, a
+        ld de, spr_meta
+        ld hl, spr_list
+.ent:   ld a, (de)
+        rla
+        jr c, .nx               ; pinned: done
+        push hl                 ; crowded if any of its bands holds 5+
+        push bc
+        ld b, 3
+        ld c, 0
+        ld a, (de)
+        add a, low band_cnt
+        ld l, a
+        ld h, high band_cnt
+.bt:    ld a, (hl)
+        cp 5
+        jr c, .bok
+        inc c
+.bok:   inc l
+        djnz .bt
+        ld a, c
+        pop bc
+        pop hl
+        or a
+        jr z, .safe
+        ld a, (crowd_n)         ; crowded: collect (list offset, sort key)
+        cp CROWD_MAX
+        jr nc, .safe            ; list full: this one just goes out in order
+        push de
+        ld e, a
+        inc a
+        ld (crowd_n), a
+        ld d, high crowd_idx
+        ld a, e
+        add a, low crowd_idx
+        ld e, a
+        ld a, l
+        ld (de), a
+        ld a, e
+        add a, crowd_key - crowd_idx
+        ld e, a
+        ld a, (hl)
+        add a, 17
+        ld (de), a
+        pop de
+        jr .nx
+.safe:  call spr_out4
+.nx:    inc e
+        ld a, l
+        add a, 4
+        ld l, a
+        djnz .ent
+        call crowd_emit
+.term:  ld a, (spr_out)
+        cp 32
+        ret z
+        ld a, SAT_END
         out (VDP_DATA), a
-.full:  ret
+        ret
+
+; HL -> spr_list entry: write its four SAT bytes, >= 30 T apart (safe
+; outside vblank). Preserves HL.
+spr_out4:
+        ld a, (hl)
+        out (VDP_DATA), a
+        inc l
+        nop
+        nop
+        ld a, (hl)
+        out (VDP_DATA), a
+        inc l
+        nop
+        nop
+        ld a, (hl)
+        out (VDP_DATA), a
+        inc l
+        nop
+        nop
+        ld a, (hl)
+        out (VDP_DATA), a
+        dec l
+        dec l
+        dec l
+        ret
+
+; Sort the crowded entries by y, split them into groups whose 16-line spans
+; chain together, and write each group rotated by (frame * 4) mod size.
+crowd_emit:
+        ld a, (crowd_n)
+        cp 2
+        jr c, .sorted
+        ld c, 1                 ; insertion sort on (key, idx)
+.outer: ld b, c
+.inner: ld a, b
+        add a, low crowd_key
+        ld l, a
+        ld h, high crowd_key
+        ld a, (hl)
+        dec l
+        cp (hl)
+        jr nc, .placed          ; key[b] >= key[b-1]
+        ld d, (hl)              ; swap keys
+        inc l
+        ld e, (hl)
+        ld (hl), d
+        dec l
+        ld (hl), e
+        ld a, l                 ; swap the matching idx entries
+        sub crowd_key - crowd_idx
+        ld l, a
+        ld d, (hl)
+        inc l
+        ld e, (hl)
+        ld (hl), d
+        dec l
+        ld (hl), e
+        dec b
+        jr nz, .inner
+.placed:
+        inc c
+        ld a, (crowd_n)
+        cp c
+        jr nz, .outer
+.sorted:
+        xor a
+        ld (grp_start), a
+.group: ld a, (grp_start)       ; extend the group while spans overlap
+        ld c, a
+        ld hl, crowd_n
+        cp (hl)
+        ret nc
+        ld b, a
+.grow:  inc b
+        ld a, (crowd_n)
+        cp b
+        jr z, .gend
+        ld a, b
+        add a, low crowd_key
+        ld l, a
+        ld h, high crowd_key
+        ld a, (hl)
+        dec l
+        sub (hl)
+        cp 16
+        jr c, .grow
+.gend:  ld a, b                 ; group = [C, B), size m = B - C
+        ld (grp_end), a
+        sub c
+        ld d, a                 ; D = m
+        ld e, 0                 ; E = start offset
+        cp 5
+        jr c, .rot0             ; four or fewer: no rotation needed
+        ld a, (frame_cnt)
+        add a, a
+        add a, a
+.mod:   cp d
+        jr c, .modok
+        sub d
+        jr .mod
+.modok: ld e, a
+.rot0:  ld b, d                 ; write m entries from start offset E
+.emit:  push bc
+        ld a, c
+        add a, e
+        add a, low crowd_idx
+        ld l, a
+        ld h, high crowd_idx
+        ld a, (hl)
+        ld l, a
+        ld h, high spr_list
+        call spr_out4
+        pop bc
+        inc e
+        ld a, e
+        cp d
+        jr c, .inr
+        ld e, 0
+.inr:   djnz .emit
+        ld a, (grp_end)
+        ld (grp_start), a
+        jr .group
 
 ; HL -> sprite entry (code), DE -> 4-byte cache entry. Resolves the pattern
-; slot and colour into [code, attribute, name, colour]. Preserves BC, DE, HL;
-; restores the VDP write address to the next SAT entry.
+; slot and colour into [code, attribute, name, colour]. Preserves BC, DE, HL.
 sprite_resolve:
         push bc
         push de
@@ -199,15 +472,18 @@ sprite_resolve:
         or c
         ld c, a
         ld a, (bc)
-        ld (de), a              ; colour
+        ld c, a
+        ld a, (hl)              ; pinned code? (table after the colours)
+        and $7F
+        add a, low SPR_PIN
+        ld b, a
         push hl
-        ld a, (spr_out)         ; the VDP write address: SAT + out*4
-        add a, a
-        add a, a
-        ld l, a
-        ld h, high VR_SAT
-        call vdp_set_write
+        ld l, b
+        ld h, high SPR_PIN
+        ld a, (hl)
         pop hl
+        or c
+        ld (de), a              ; colour | pinned
         pop de
         pop bc
         ret

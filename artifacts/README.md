@@ -16,3 +16,4 @@ recordings, one folder per milestone. Files here are committed; `build/` is not.
 - `sprite-sheet-one-colour.png`: all 128 arcade sprite codes converted to one-colour TMS9918 sprites (shape = non-black pixels, colour = dominant colour).
 - `first-sprites-handler1800.png`, `arcade-vs-colecovision-handler1800.png`: first sprites; the same moment (handler 1800, identical inputs) in MAME (left) and on the ColecoVision (right). Tiles agree 98.7% pixel-for-pixel; every apple and monster is at the arcade's position.
 - `sprites-in-play.png`: scripted game with sprites, after the sprite pass was optimized (per-entry cache, SAT streamed in vblank).
+- `multiplexer-arcade-vs-cv-1477-1480.png`: four consecutive frames with up to 6 sprites on one scanline, arcade (top) vs ColecoVision (bottom): every apple, monster and Mr. Do stays visible; only the crowded rows rotate.

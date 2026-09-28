@@ -25,6 +25,11 @@ dirty_q         equ $5700       ; 256-byte aligned, inside the unused DIP-test c
 ent_cache       equ $5800       ; sprites: 32 x [code, attr, name, colour], page aligned
 slot_key        equ $5900       ; sprite cache: 64 x key word ($FFFF = empty), page aligned
 slot_frame      equ $5980       ; sprite cache: frame each slot was last used
+spr_list        equ $5880       ; this frame's sprites: 32 x [y, x, name, colour]
+band_cnt        equ $56B0       ; sprites per 8-line band (28 + 2 overflow)
+spr_meta        equ $56CE       ; per spr_list entry: top band | pinned (bit 7)
+CROWD_MAX       equ 20
+        assert spr_meta + 32 <= dirty_q
 ARC_HI_BANK     equ 0           ; arcade $6000-$7FFF, mapped at $C000 while it runs
 ARC_LO_BANK     equ 1           ; arcade $0000-$5FFF in 8KB pieces, banks 1-3
 ; Reading $FFC0-$FFFF switches MegaCart banks, so no bank may keep data in its
@@ -32,6 +37,9 @@ ARC_LO_BANK     equ 1           ; arcade $0000-$5FFF in 8KB pieces, banks 1-3
 
 ; --- driver variables (in the arcade ROM's unused padding, never cleared by it) ---
         org DRV_RAM
+crowd_idx:      ds CROWD_MAX    ; crowded sprites: spr_list offsets
+crowd_key:      ds CROWD_MAX    ;   and sort keys (same page as crowd_idx)
+        assert high crowd_idx == high (crowd_key + CROWD_MAX - 1)
 frame_cnt:      ds 2            ; +1 per vblank
 irq_count:      ds 2            ; arcade vblank handler entries
 deferred_cnt:   ds 2            ; vblanks held because the arcade had interrupts off
@@ -60,6 +68,11 @@ spr_ybase:      ds 1
 spr_y:          ds 1
 spr_out:        ds 1            ; SAT entries written this frame
 spr_tmp:        ds 4            ; resolve scratch for entries past the cache
+crowd_n:        ds 1
+spr_crowd:      ds 1            ; nonzero: some band holds five or more sprites
+emit_want:      ds 1
+grp_start:      ds 1
+grp_end:        ds 1
 key_prev:       ds 1            ; keypad value last frame
 coin_hold:      ds 1            ; frames left to hold the coin line low
 inp_override:   ds 1            ; test scripts: nonzero = use inp_p1/inp_p2 as-is
@@ -115,6 +128,7 @@ repend:         ds 1            ; a vblank arrived while one was being delivered
         org $C000                       ; bank 13: sprite patterns, codes 0-63 + colours
         incbin "build/sprites/pat.bin", 0, $2000
         incbin "build/sprites/col.bin"
+        incbin "build/sprites/pin.bin"
         ds $10000-$, $FF
 
         org $C000                       ; bank 14: sprite patterns, codes 64-127

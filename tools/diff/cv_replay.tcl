@@ -57,12 +57,14 @@ proc on_handler {} {
 proc on_sync {} {
     if {[info exists ::env(SNAP)]} {
         if {$::h == $::env(SNAP) - 40} { set ::throttle on }
-        if {$::h == $::env(SNAP)} {
+        set n [expr {[info exists ::env(SNAPN)] ? $::env(SNAPN) : 1}]
+        if {$::h >= $::env(SNAP) && $::h < $::env(SNAP) + $n} {
             debug break
-            after realtime 0.3 [list apply {{} {
-                screenshot -raw $::env(SNAPFILE)
-                exit
-            }}]
+            set last [expr {$::h == $::env(SNAP) + $n - 1}]
+            after realtime 0.3 [list apply {{h last} {
+                screenshot -raw [format $::env(SNAPFILE) $h]
+                if {$last} { exit } else { debug cont }
+            }} $::h $last]
         }
     }
     apply_inputs $::post
