@@ -13,6 +13,8 @@ opt_table:
         jp opt_snd_slot         ; +0 sound tick $5A90
         jp opt_spr_copy         ; +3 the handler's sprite RAM copy ($00C8)
         jp opt_next_98          ; +6 alpha_advance loop tail $420D
+        jp snd_w1               ; +9 ld ($9801),a at $5AE7 (sound.asm)
+        jp snd_w2               ; +12 ld ($9802),a at $5AEE
 
 ; Sound tick: HL -> a request-flag byte with bit 0, 1 or 2 set, B = the
 ; loop count. The original three tests, in their order, with IX = the byte

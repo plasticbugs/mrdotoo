@@ -98,6 +98,12 @@ spr_cam:        ds 1            ; camera of the last sprite pass
 sat_n:          ds 1            ; SAT entries written this pass (32 max)
 img_bank:       ds 1            ; image mode: the image's bank
 img_phase:      ds 1            ;   flag frame
+snd_lat1:       ds 1            ; sound.asm: last latch byte for chip 1
+snd_lat2:       ds 1            ;   and chip 2
+snd_mix:        ds 1            ;   AY mixer
+snd_nvol2:      ds 1            ;   chip 2 noise volume (AY scale)
+snd_tvolc:      ds 1            ;   chip 2 tone 2 volume (AY scale)
+snd_due:        ds 1            ;   sound ticks owed (one per vblank)
 scn_flush2:     ds 1            ; a heavy build's colours and names are due
 scn_brow:       ds 1            ; next band row of the build under way (0 = none)
 scn_lastn:      ds 1            ; tiles of the previous build
@@ -267,6 +273,7 @@ start:
         ld (hl), 0
         ldir
         call render_init
+        call snd_init
         call sprites_init
         call inputs_idle
 
@@ -350,6 +357,9 @@ rst_vectors:
         dw $0028, vh_de_a
         dw $0030, vh_hl_n
         dw $0038, vh_hl_c
+        ifndef VALIDATE
+        dw $0010, snd_rst_bc    ; the arcade's sound chip stores (sound.asm)
+        endif
         dw $FFFF
 
 ; $0008 hook, reached by rst $08 (every arcade `ei`). The byte at $0009 picks
@@ -386,6 +396,10 @@ nmi:
         ld hl, (frame_cnt)
         inc hl
         ld (frame_cnt), hl
+        ifndef VALIDATE
+        ld hl, snd_due          ; the sound tick runs once per vblank (sound.asm)
+        inc (hl)
+        endif
         ld a, (in_nmi)          ; our own work overran a frame: skip this one
         or a
         jr nz, .nested
@@ -399,6 +413,9 @@ nmi:
 .busy:  ld (arc_idle), a
         call render
         call read_inputs
+        ifndef VALIDATE
+        call snd_nmi_tick
+        endif
         xor a
         ld (in_nmi), a
 
@@ -871,6 +888,7 @@ font_len equ $-font
         include "sprites.asm"
         include "scene.asm"
         include "image.asm"
+        include "sound.asm"
 
         assert $ <= OPT_BASE
         ds OPT_BASE-$, $FF

@@ -36,3 +36,4 @@ recordings, one folder per milestone. Files here are committed; `build/` is not.
 - `10-all-cutscenes/`: diamond (SPECIAL) and EXTRA scenes as captured screens, after the logic fixes that made their text appear (unrelocated scene records, broken ROM checksums).
 - `11-speed-and-vg-fix/`: consecutive VERY GOOD finale frames after the fix (no torn characters): spaced VRAM writes, whole-band builds between arcade frames.
 - `12-sprites/`: the romhack's blue chompers mapped onto arcade codes $27-$2A (white chompers stay arcade); two-colour Mr. Do; the romhack's EXTRA screen with its waving flag.
+- `13-sound/`: the arcade's own sound engine on the CV SN76489 + SGM AY (chip 1 -> SN, chip 2 -> AY, periods scaled 7/8). Game start on MAME vs the CV; a heavy level-5 round where the logic runs at ~62% speed but the music keeps tempo (the sound tick runs from the NMI every vblank).

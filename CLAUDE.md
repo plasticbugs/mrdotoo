@@ -56,6 +56,10 @@ Arcade-faithful port of Mr. Do! (Universal 1982) to the ColecoVision + Super Gam
 - **ROM checksums:** the arcade sums $0485-$049E + $0547-$054E (must be $4F, $19FA) and $770B-$774C (must be $DF, $74BB). Our patches (PAL checks, video hooks) change those bytes, so `fix_checksums` sets each compare's operand to the patched sum (last step of patch_arcade). A failing first check stops the level counters $E09F/$E0A0 at round end.
 - **Data records read by video routines** ($03D4/$0403/$0425 and scene pointer tables $73FC/$78C3) are relocated from recorded reads (tools/profile/sweep/rom_data_reads.json). The cutscenes were missing from that sweep: `tools/capture/scene_record.lua` with `DATAOUT=` (and `EXECOUT=` for the code map) records them; merge new scenes' reads into the json.
 
+## Sound
+- The arcade's own sound engine runs unchanged; src/sound.asm translates its chip writes: chip 1 ($9801) -> CV SN76489, chip 2 ($9802) -> SGM AY (tone periods x7/8 for the clocks; chip 2's noise shares AY channel C). Patches (normal build only): the `ld (bc),a` chip stores -> rst $10, `ld ($9801/2),a` at $5AE7/$5AEE -> snd_w1/snd_w2.
+- The sound tick $5A90 runs from our NMI once per vblank (snd_nmi_tick; the handler's `call $5A90` at $00D2 is NOPed), so music keeps tempo when the logic lags. Race-free: the game only posts requests with single stores ($02D9/$02EA), and every chip write is inside the tick. The validation build keeps the arcade's handler-driven tick.
+
 ## Lockstep validation
 - `make validate FRAMES=n SEED=s` records n vblank handlers in MAME (`tools/diff/mame_record.lua`, scripted random play), replays the same inputs on `build/mrdo_validate.rom` in openMSX (`tools/diff/cv_replay.tcl`), and compares work RAM plus video RAM at the same sync point of every handler (`tools/diff/compare.py`). Relocated pointers held in RAM compare as equal.
 - Validation mode runs the background pathfinder to completion with the vblank held off, identically in both emulators. Otherwise the result depends on CPU speed (the arcade's pathfinder progress per frame is a function of its 4 MHz Z80) and the RAM diverges for timing reasons alone.

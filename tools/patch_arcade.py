@@ -235,7 +235,25 @@ OPT_SND_SLOT = OPT_BASE + 0
 OPT_SPR_COPY = OPT_BASE + 3
 # (the same skipper for trigger_apple_wobble ($80) and chomper_scan_apple
 # ($80-$B7) measured slower: those states are common, so it rarely skips)
+OPT_SND_W1 = OPT_BASE + 9
+OPT_SND_W2 = OPT_BASE + 12
 OPT_SCAN = [(0x420D, 0x41EC, 0x4211, OPT_BASE + 6, "alpha_advance: next object in state $98")]
+
+
+def sound_patches():
+    """Normal build: the arcade's sound chip writes go to src/sound.asm (the CV
+    SN76489 + SGM AY). The validation build keeps the plain stores (rst $10
+    is its pathfinder hook)."""
+    for a in (0x5C3A, 0x5C3E, 0x5C45, 0x5C4C, 0x5C53):   # ld (bc),a, BC = $9801/2
+        assert ORIG[a] == 0x02
+        put_bytes(a, bytes([0xD7]), "sound chip store -> rst $10 (snd_rst_bc)")
+    for a, entry, chip in ((0x5AE7, OPT_SND_W1, 1), (0x5AEE, OPT_SND_W2, 2)):
+        assert ORIG[a:a + 3] == bytes([0x32, 0x00 + chip, 0x98])
+        put_bytes(a, bytes([0xCD, entry & 0xFF, entry >> 8]), f"ld ($980{chip}),a -> call snd_w{chip}")
+    # The sound tick runs from our NMI every vblank (src/sound.asm
+    # snd_nmi_tick), not from the handler: music keeps time when the logic lags.
+    assert ORIG[0x00D2:0x00D5] == bytes([0xCD, 0x90, 0x5A])
+    put_bytes(0x00D2, bytes(3), "call $5A90 (sound tick) -> nops: the NMI ticks")
 
 
 def speed_patches():
@@ -369,6 +387,8 @@ def main():
     validate = "--validate" in sys.argv
     special_patches()
     speed_patches()
+    if not validate:
+        sound_patches()
     stubs = video_hooks(cm)
     if validate:
         for a, data, why in VALIDATE_PATCHES:
