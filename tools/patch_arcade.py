@@ -237,6 +237,7 @@ OPT_SPR_COPY = OPT_BASE + 3
 # ($80-$B7) measured slower: those states are common, so it rarely skips)
 OPT_SND_W1 = OPT_BASE + 9
 OPT_SND_W2 = OPT_BASE + 12
+OPT_FILL_046C = OPT_BASE + 15
 OPT_SCAN = [(0x420D, 0x41EC, 0x4211, OPT_BASE + 6, "alpha_advance: next object in state $98")]
 
 
@@ -304,6 +305,14 @@ def speed_patches():
     assert ORIG[0x00C8:0x00CB] == bytes([0xC4, 0x6D, 0x02])
     put_bytes(0x00C8, bytes([0xC4, OPT_SPR_COPY & 0xFF, OPT_SPR_COPY >> 8]),
               "sprite RAM copy via opt_spr_copy (new-sprites flag)")
+    # Video fill $046C/$046D (attr A + tile $29 over C rows of B cells): native
+    # loop in src/opt.asm (fill_046c) that stores big fills directly and asks
+    # for one full redraw instead of queueing ~3600 hooked stores (the coin-up
+    # clear stalled the logic for 33 frames). Same pushes, exit registers, flags.
+    # Entered at $046D (after $046C's `xor a`, or directly by $7076).
+    assert ORIG[0x046C:0x0470] == bytes([0xAF, 0xC5, 0xD5, 0x21])
+    put_bytes(0x046D, bytes([0xC3, OPT_FILL_046C & 0xFF, OPT_FILL_046C >> 8]),
+              "video fill $046D -> fill_046c (direct stores + full redraw)")
 
 
 # Video RAM write sites (tools/profile/sweep: every PC that wrote $8000-$8FFF).
