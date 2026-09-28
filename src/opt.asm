@@ -131,7 +131,16 @@ fill_fast:
         ld a, (mode)
         cp MODE_SCREEN
         jr nz, .m
-        ld a, (scn_pbank)
+        ld a, b                 ; a screen being wiped whole (32 columns, 24+
+        cp 32                   ; rows: the arcade clearing it for what comes
+        jr nz, .band            ; next)? The display goes black until the next
+        ld a, c                 ; tile set is up (render_body, go_black), so
+        cp 24                   ; the band no longer matters
+        jr c, .band
+        ld a, 1
+        ld (blank_req), a
+        jr .m
+.band:  ld a, (scn_pbank)
         or a
         ret nz
 .m:     ld a, b                 ; 8+ columns and 8+ rows (0 = 256)

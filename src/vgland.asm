@@ -1,15 +1,21 @@
 ; =============================================================================
-; vgland.asm - VERY GOOD: the romhack's picture once the characters land
+; vgland.asm - VERY GOOD: the romhack's Mr. Do, apple and dinosaur
 ; =============================================================================
-; The VERY GOOD cutscene scrolls Mr. Do, the apple and the dinosaur in with
-; the arcade's own tiles (scene.asm), whose colours clash on the TMS9918.
-; When the scroll is back at 0 (they have landed, ~3.6 s before the scene
-; ends) this puts the CV romhack's picture of the same three in their place
-; (tools/gen_images.py vgland): its tiles in the slot bank that is not on
-; screen, 14 x 5 names at (VGL_COL, VGL_ROW), and its 10 sprites (some black,
-; covering tile pixels); two frames swapped every 8 vblanks. Band builds and
-; the sprite pass pause meanwhile; leaving the screen gives the sprite cache
-; back (vgl_leave, as leave_image).
+; The VERY GOOD cutscene scrolls its characters along a band of background
+; tiles (scene.asm): first the letter monster, then the dinosaur, the apple
+; and Mr. Do pushing it, all moving right one pixel per step of the arcade's
+; scroll register until it reaches 0 (they have landed; ~3.6 s later the
+; scene ends). The arcade's own tiles for the last three clash on the
+; TMS9918, so they are drawn with the CV romhack's picture of the same three
+; instead (tools/gen_images.py vgland): its 59 tiles in codes vgl_base.. (the
+; band's slot banks are 2 x SCN_SLOTS codes, which leaves them free), 14 x 5
+; names put into the band's names (SCN_BUF) at every build, at column
+; VGL_COL - scroll / 8 rounded up (8-pixel steps; it lands at VGL_COL at
+; scroll 0), and its 10 sprites (some black, covering tile pixels) moved with
+; it. Its two frames (the legs) alternate every 8 vblanks. The band builder
+; leaves out the arcade's art for them (native rows 7-22, vgl_filter), so
+; only the letter monster is built from the arcade's tiles. The sprite pass
+; pauses while this runs; leaving the screen gives the sprite cache back.
 ; =============================================================================
 VGL_BANK        equ IMG_BANK_EXTRA  ; after the EXTRA image
 VGL_DATA        equ $E000
@@ -25,73 +31,193 @@ VGL_COL         equ 5               ; = tools/gen_images.py VG_COL, VG_ROW
 VGL_ROW         equ 16
 VGL_CHUNK       equ 192             ; bytes uploaded per vblank (spaced)
 VG_SCR          equ 2               ; "verygood" in tools/gen_screens.py SCREENS
+VGL_NONE        equ $80             ; vgl_x0: not placed yet
+
 ; Variables: the driver's area is full; these sit after SCN_LIST in the
 ; same unused arcade padding (cleared by render_init).
-vgl_on          equ SCN_LIST + SCN_SLOTS    ; the picture is up
-vgl_armed       equ vgl_on + 1      ; the VERY GOOD band has scrolled
-vgl_step        equ vgl_on + 2      ; upload step
+vgl_on          equ SCN_LIST + SCN_SLOTS    ; the VERY GOOD screen is up
+vgl_step        equ vgl_on + 2      ; upload step (4 = done)
 vgl_done        equ vgl_on + 3      ; bytes of the step done (2)
-vgl_base        equ vgl_on + 5      ; first tile code
-vgl_phase       equ vgl_on + 6      ; frame
+vgl_base        equ vgl_on + 5      ; code of romhack tile 1
+vgl_phase       equ vgl_on + 6      ; frame (the legs)
 nmi_late        equ vgl_on + 7      ; main.asm: an overrunning NMI owes the VDP ack
 img_d           equ vgl_on + 8      ; image.asm: EXTRA pan, tiles left to go
 img_bd          equ vgl_on + 9      ;   the step being built
 img_brow        equ vgl_on + 10     ;   next row of it ($FF: none)
 up_black        equ vgl_on + 11     ; render.asm: the next upload's blank frame is black
-        assert up_black < $2F00
+vgl_xb          equ vgl_on + 12     ; block column of the build under way
+vgl_x0          equ vgl_on + 13     ; block column on screen (VGL_NONE: none)
+vgl_xs          equ vgl_on + 14     ; block column the sprites are at
+blank_req       equ vgl_on + 15     ; opt.asm: the arcade is wiping a screen (go_black)
+scr_hold        equ vgl_on + 16     ; render.asm: vblanks screens are not looked for
+        assert scr_hold < $2F00
 
-; From scene_update (a screen with a band): NZ while the picture is up (no
-; band builds then). Starts it once the VERY GOOD scroll has come back to 0
-; and the band is idle with its scroll-0 build out. Clobbers AF, B.
+; From scene_update (a screen with a band): the VERY GOOD screen starts the
+; romhack block. Returns Z (the band keeps building). Clobbers AF.
 vgl_check:
         ld a, (vgl_on)
         or a
-        ret nz
+        jr nz, .z
         ld a, (scr)
         cp VG_SCR
-        jr nz, .off
-        ld a, (IO_SCROLL_Y)
-        or a
-        jr z, .zero
-        ld a, 1                 ; scrolling: armed for the landing
-        ld (vgl_armed), a
+        jr nz, .z
         xor a
-        ret
-.zero:  ld a, (vgl_armed)
-        or a
-        ret z
-        ld a, (scn_brow)
-        ld b, a
-        ld a, (scn_ready)
-        or b
-        ld b, a
-        ld a, (scn_flush2)
-        or b
-        ld b, a
-        ld a, (scn_scroll)
-        or b
-        jr nz, .no              ; the landed band not out yet
-        ld (vgl_armed), a
         ld (vgl_step), a
         ld (vgl_done), a
         ld (vgl_done+1), a
-        ld a, (scn_bank)        ; the bank on screen: use the other one
-        or a
+        ld (vgl_phase), a
+        ld a, VGL_NONE
+        ld (vgl_x0), a
+        ld (vgl_xs), a
+        ld (vgl_xb), a
         ld a, (scn_base)
-        jr nz, .b
-        add a, SCN_SLOTS
-.b:     ld (vgl_base), a
+        add a, 2*SCN_SLOTS
+        ld (vgl_base), a
         ld a, 1
         ld (vgl_on), a
-        or a
-        ret
-.off:   xor a
-        ld (vgl_armed), a
-        ret
-.no:    xor a
+.z:     xor a
         ret
 
-; From scene_vblank while the picture is up (VDP access allowed).
+; The band builder's art mask byte A (native rows E..E+7): the romhack
+; block's rows left out. Clobbers C.
+vgl_filter:
+        ld c, a
+        ld a, (vgl_on)
+        or a
+        ld a, c
+        ret z
+        push hl
+        ld a, e
+        rrca
+        rrca
+        rrca
+        and 3
+        ld hl, .f
+        add a, l
+        ld l, a
+        jr nc, .n
+        inc h
+.n:     ld a, c
+        and (hl)
+        pop hl
+        ret
+.f:     db $7F, $00, $80, $FF   ; native rows 7-22 out
+
+; After the builder filled band row scn_k (at scn_rowbuf) for scn_scroll:
+; the block's names into it. Preserves BC.
+vgl_patch:
+        ld a, (vgl_on)
+        or a
+        ret z
+        ld a, (vgl_step)
+        cp 4
+        ret c                   ; its tiles are not loaded yet
+        ld a, (scn_scroll)      ; column = VGL_COL - (scroll + 7) / 8
+        ld l, a
+        ld h, 0
+        ld de, 7
+        add hl, de
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        ld a, (scn_k)           ; a build's first row: no column yet
+        or a
+        jr nz, .k0
+        ld a, VGL_NONE
+        ld (vgl_xb), a
+.k0:    push hl                 ; the arcade still has their art in this band
+        ld a, (scn_k)           ; row? (it erases it as the scene ends)
+        add a, a
+        add a, a
+        ld e, a
+        ld d, 0
+        ld hl, scn_mask
+        add hl, de
+        ld a, (hl)              ; native rows 7-22
+        and $80
+        inc hl
+        or (hl)
+        inc hl
+        ld e, a
+        ld a, (hl)
+        and $7F
+        or e
+        pop hl
+        ret z
+        ld a, VGL_COL
+        sub h
+        ld (vgl_xb), a
+        push bc
+        ld c, a                 ; C = column of block column 0 (signed)
+        ld a, VGL_BANK
+        call select_bank
+        call vgl_src            ; HL = the row's romhack names
+        ld de, (scn_rowbuf)
+        ld b, 14
+.j:     ld a, c
+        cp 24
+        jr nc, .skip            ; left of the band (negative) or right of it
+        ld a, (hl)
+        or a
+        jr z, .skip             ; (nothing there in the picture)
+        push de
+        push hl
+        ld l, c
+        ld h, 0
+        add hl, de
+        ex de, hl
+        ld hl, vgl_base
+        add a, (hl)
+        dec a
+        ld (de), a
+        pop hl
+        pop de
+.skip:  inc hl
+        inc c
+        djnz .j
+        pop bc
+        ld a, (scn_pbank)       ; the builder's bank back
+        jp select_bank
+
+; HL = romhack names of block row scn_k in the current frame. Preserves BC.
+vgl_src:
+        ld a, (scn_k)
+        ld e, a
+        ld hl, VGL_FR1
+        ld a, (vgl_phase)
+        or a
+        jr z, .m
+        ld a, e
+        cp 3
+        jr c, .m
+        sub 3                   ; frame 2 changes rows 3-4
+        ld e, a
+        ld hl, VGL_FR2
+.m:     ld a, e
+        add a, a                ; * 14
+        ld d, a
+        add a, a
+        add a, a
+        add a, a
+        sub d
+        ld e, a
+        ld d, 0
+        add hl, de
+        ret
+
+; scene_flush has put a build's names on screen.
+vgl_flushed:
+        ld a, (vgl_on)
+        or a
+        ret z
+        ld a, (vgl_xb)
+        ld (vgl_x0), a
+        ret
+
+; Each vblank of the VERY GOOD screen, after the band's flush (VDP access
+; allowed): the uploads, then the sprites and the legs.
 vgl_tick:
         ld a, VGL_BANK
         call select_bank
@@ -106,7 +232,7 @@ vgl_tick:
         ld (vgl_step), a
         ret
 .up:    cp 4
-        jr nc, .names
+        jr nc, .run
         ld hl, VR_SPT           ; step 1: sprite patterns
         ld de, VGL_SPT
         ld bc, 20*32
@@ -170,70 +296,114 @@ vgl_tick:
         ret
 .skip:  pop hl
         ret
-.names: cp 5
-        jr nc, .anim
-        ld a, 5                 ; step 4: the picture, frame 1
-        ld (vgl_step), a
-        xor a
-        ld (vgl_phase), a
-        ld hl, VGL_FR1
-        ld b, VGL_ROW
-        ld c, 5
-        call vgl_rows
-        ld hl, VGL_SAT1
-        jr vgl_sat
-.anim:  ld a, (frame_cnt)       ; then the two frames, 8 vblanks each
+.run:   ld a, (frame_cnt)       ; the legs, every 8 vblanks
         and 7
-        ret nz
+        jr nz, .spr
         ld a, (vgl_phase)
         xor 1
         ld (vgl_phase), a
-        ld hl, VGL_FR2
-        ld de, VGL_SAT2
-        jr nz, .f
-        ld hl, VGL_FR1 + 3*14
-        ld de, VGL_SAT1
-.f:     push de
-        ld b, VGL_ROW + 3       ; rows 3-4 of the block change
-        ld c, 2
+        ld a, (vgl_x0)
+        cp VGL_NONE
+        jr z, .spr
+        ld b, VGL_ROW + 3       ; rows 3-4 of the block
+        ld c, 3
         call vgl_rows
-        pop hl
-        ; fall through
-; HL = 41 bytes of SAT (10 sprites + terminator).
+        ld b, VGL_ROW + 4
+        ld c, 4
+        call vgl_rows
+        ld a, VGL_NONE          ; and its sprites' frame
+        ld (vgl_xs), a
+.spr:   ld a, (vgl_x0)          ; the sprites follow the block
+        ld hl, vgl_xs
+        cp (hl)
+        ret z
+        ld (hl), a
+        cp VGL_NONE
+        jr nz, vgl_sat
+        ld hl, VR_SAT           ; the block is gone: so are they
+        call vdp_set_write
+        ld a, SAT_END
+        out (VDP_DATA), a
+        ret
+; The romhack's sprites for block column A (signed) and the current frame.
 vgl_sat:
-        push hl
+        sub VGL_COL             ; pixels to add: (column - VGL_COL) * 8
+        ld l, a
+        rla
+        sbc a, a
+        ld h, a
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        ex de, hl               ; DE = offset
         ld hl, VR_SAT
         call vdp_set_write
+        ld hl, VGL_SAT1
+        ld a, (vgl_phase)
+        or a
+        jr z, .f
+        ld hl, VGL_SAT2
+.f:     ld b, 10
+.e:     push bc
+        ld c, (hl)              ; Y
+        inc hl
+        push hl
+        ld a, (hl)              ; X + offset (16-bit)
+        ld l, a
+        ld h, 0
+        add hl, de
+        ld b, 0                 ; B = early clock ($80) or 0
+        bit 7, h
+        jr z, .pos
+        ld a, l                 ; left of the screen: early clock, X + 32
+        add a, 32
+        ld l, a
+        ld a, h
+        adc a, 0
+        ld h, a
+        ld b, $80
+        jr nz, .hide            ; more than 32 pixels left: hidden
+        jr .x
+.pos:   ld a, h
+        or a
+        jr z, .x
+.hide:  ld c, $D1               ; off the screen (not the $D0 terminator)
+.x:     ld a, c
+        out (VDP_DATA), a
+        ld a, l
         pop hl
-        ld b, 41
-.s:     ld a, (hl)
         out (VDP_DATA), a
         inc hl
+        ld a, (hl)              ; pattern
+        inc hl
         nop
-        nop
-        djnz .s
+        out (VDP_DATA), a
+        ld a, (hl)              ; colour
+        inc hl
+        or b
+        out (VDP_DATA), a
+        pop bc
+        djnz .e
+        ld a, SAT_END
+        out (VDP_DATA), a
         ret
 
-; HL = romhack names (14 per row), B = first screen row, C = rows: the rows'
-; 24 band columns into both name tables (the block at VGL_COL, black around).
+; B = screen row, C = block row: that row of the current frame, clipped to
+; the band, into both name tables at column vgl_x0.
 vgl_rows:
-.row:   push bc
-        push hl
+        ld a, (scn_k)           ; (vgl_src reads scn_k)
+        push af
+        ld a, c
+        ld (scn_k), a
+        call vgl_src
+        pop af
+        ld (scn_k), a
         ld a, (pnt_front)
         call .one
-        pop hl
-        push hl
         ld a, (pnt_back)
-        call .one
-        pop hl
-        ld de, 14
-        add hl, de
-        pop bc
-        inc b
-        dec c
-        jr nz, .row
-        ret
-.one:   push hl                 ; A = table high byte, B = row
+.one:   push hl                 ; A = table high byte, B = row, HL = names
+        push bc
+        ex de, hl
         ld l, b
         ld h, 0
         add hl, hl
@@ -243,34 +413,38 @@ vgl_rows:
         add hl, hl
         add a, h
         ld h, a
+        ex de, hl               ; DE = row address, HL = names
+        ld a, (vgl_x0)
+        ld c, a
+        ld b, 14
+.j:     ld a, c
+        cp 24
+        jr nc, .n               ; outside the band
+        push hl
+        ld l, c
+        ld h, 0
+        add hl, de
         call vdp_set_write
         pop hl
-        ld c, 24
-        ld e, 0                 ; column
-.c:     ld a, e
-        sub VGL_COL
-        cp 14
-        ld a, 0
-        jr nc, .out             ; outside the block: black
         ld a, (hl)
-        inc hl
         or a
-        jr z, .out
+        jr z, .o
+        push hl
+        ld hl, vgl_base
+        add a, (hl)
         dec a
-        ld d, a
-        ld a, (vgl_base)
-        add a, d
-.out:   out (VDP_DATA), a
-        inc e
-        dec c
-        jr nz, .c
+        pop hl
+.o:     out (VDP_DATA), a
+.n:     inc hl
+        inc c
+        djnz .j
+        pop bc
+        pop hl
         ret
 
-; A new screen or the playfield takes over: if the picture was up, hide its
+; A new screen or the playfield takes over: if the block was up, hide its
 ; sprites and give the sprite cache back. Preserves BC, DE, HL.
 vgl_leave:
-        xor a
-        ld (vgl_armed), a
         ld a, (vgl_on)
         or a
         ret z

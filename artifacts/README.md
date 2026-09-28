@@ -43,3 +43,4 @@ recordings, one folder per milestone. Files here are committed; `build/` is not.
 - `15-hud/next_letter_marker.png`: the next EXTRA letter (the arcade's letter-monster sprite on the box) marked white on blue in the panel.
 - `09-very-good-cutscene/vg_landed_romhack_frame1/2.png`: once VERY GOOD's characters land, the romhack's picture (tiles + black cover sprites, two frames) replaces the arcade tiles; `vg_arriving_arcade_tiles.png` is the scroll-in just before.
 - `16-extra-pan/`: EXTRA: the romhack picture from the scene's first frame, its landscape panning 8 tiles in step with the arcade's scroll (CV frames every 0.1 s), and the arcade's pan in MAME for reference.
+- `09-very-good-cutscene/vg_romhack_characters_sequence.png`: the letter monster in arcade tiles, then the romhack's dinosaur, apple and Mr. Do walking in (8-pixel steps) and landing; `vg_ending_to_black_to_level.png`: landed, black while the next level is drawn, scene 4 (0.5 s instead of 3.5 s).

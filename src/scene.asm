@@ -30,7 +30,7 @@ SCN_BUF         equ $6A50       ; band names, 24 per row. Arcade stack area the
 SCN_BUF_MAX     equ 6 * 24      ; arcade never uses ($EA50-$EB4B); ours stays
         assert SCN_BUF + SCN_BUF_MAX <= $6B00   ; above $6B30 in every replay
 SCN_LIST        equ $2E96       ; pair id per slot: unused padding in the arcade
-SCN_SLOTS       equ 70          ; image ($2E96-$2EFF, never executed or read)
+SCN_SLOTS       equ 50          ; image ($2E96-$2EFF, never executed or read)
         assert SCN_LIST + SCN_SLOTS <= $2F00
 IDC             equ $0800       ; VRAM, free with the shared pattern table:
                                 ; (band row * 32 + native row) * 2 + (phase != 0)
@@ -53,8 +53,8 @@ scene_update:
         ld a, (scn_pbank)
         or a
         ret z                   ; this screen has no band
-        call vgl_check          ; VERY GOOD landed: the romhack's picture
-        ret nz                  ; (vgland.asm)
+        call vgl_check          ; VERY GOOD: the romhack's characters
+                                ; (vgland.asm)
         ld a, (up_pending)
         or a
         ret nz                  ; its tile set is not loaded yet
@@ -132,10 +132,12 @@ scene_vblank:
         ld a, (up_pending)
         or a
         ret nz
-        ld a, (vgl_on)
+        call .flush
+        ld a, (vgl_on)          ; then the romhack characters (vgland.asm)
         or a
-        jp nz, vgl_tick
-        ld a, (scn_flush2)
+        ret z
+        jp vgl_tick
+.flush: ld a, (scn_flush2)
         or a
         jp nz, scene_flush.second
         ld a, (scn_ready)
@@ -606,6 +608,7 @@ scene_build:
         add hl, de
         ld e, 0                 ; E = native row of bit 0 of the byte
 .byte:  ld a, (hl)
+        call vgl_filter         ; (VERY GOOD: not the romhack's characters)
         or a
         jr z, .next
         push hl
@@ -629,6 +632,7 @@ scene_build:
         ld a, e
         cp 32
         jr c, .byte
+        call vgl_patch          ; the romhack block's names in this row
         pop bc
         inc c
         djnz .row
@@ -808,7 +812,7 @@ scene_flush:
         add hl, bc
         pop bc
         djnz .row
-        ret
+        jp vgl_flushed
 ; 8 bytes (at offset E) of each listed pair's tile at the built phase. The
 ; pair bank is mapped.
 .pass:  ld a, (scn_scroll)      ; E += phase / 2 * 16

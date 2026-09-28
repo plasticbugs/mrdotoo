@@ -183,10 +183,11 @@ vh_hl_n:                        ; rst $30 + inline byte: ld (hl),n
 render_init:
         xor a
         ld (vgl_on), a
-        ld (vgl_armed), a
         ld (nmi_late), a
         ld (img_d), a
         ld (up_black), a
+        ld (blank_req), a
+        ld (scr_hold), a
         ld (q_head), a
         ld (q_tail), a
         ld (redraw_all), a
@@ -220,6 +221,9 @@ render:
         jp select_bank
 
 render_body:
+        ld a, (blank_req)       ; the arcade is wiping the screen it showed
+        or a
+        call nz, go_black
         call scene_vblank       ; a cutscene band's new tiles and names
         call late_ack           ; (safe points: see nmi)
         call extra_check        ; the EXTRA scene starting: its picture
@@ -332,6 +336,40 @@ render_body:
         call upload_set
 .done:  ld a, ARC_HI_BANK
         jp select_bank
+
+; The arcade is wiping the whole screen of a cutscene or other screen (a
+; full-screen fill, opt.asm fill_fast): nothing of it is worth drawing any
+; more. Black display, no mode (no cells drawn, no band, no sprites) until
+; the next tile set goes up, which turns the display back on. Without this
+; the NMI kept rendering the dying screen cell by cell (and the band kept
+; tracking it) while the arcade drew the next level: ~3 s after VERY GOOD.
+go_black:
+        xor a
+        ld (blank_req), a
+        call leave_image        ; (an image or the VERY GOOD characters)
+        call vgl_leave
+        ld a, VDP_R1_ON & ~$40
+        ld c, 1
+        call vdp_reg
+        ld a, VDP_R7
+        ld c, 7
+        call vdp_reg
+        xor a
+        ld (mode), a
+        ld (redraw_all), a
+        ld (flip_wait), a
+        ld (cw_valid), a
+        ld a, PF_ROWS
+        ld (rd_row), a
+        ld a, $FF
+        ld (cw_attr), a         ; whatever comes next is new
+        ld (cw_tile), a
+        ld (scr), a
+        ld a, 16
+        ld (scr_hold), a
+        ld a, (q_head)          ; the queue is for the wiped screen
+        ld (q_tail), a
+        ret
 
 ; Carry if the arcade's sprite queue holds a Mr. Do code ($00-$26).
 ; Clobbers AF, BC, HL.
@@ -472,6 +510,13 @@ check_screens:
         ld a, (cw_valid)
         or a
         ret nz
+        ld a, (scr_hold)        ; just wiped: its signature cell may still be
+        or a                    ; there for a moment
+        jr z, .look
+        dec a
+        ld (scr_hold), a
+        ret
+.look:
         ld hl, scr_index
         ld c, 0
 .next:  ld a, c

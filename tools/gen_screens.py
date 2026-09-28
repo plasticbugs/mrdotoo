@@ -45,7 +45,8 @@ BANK_USE = BANK - 64            # MegaCart hotspot
 SCREEN_MAX = 224
 HASH_N = 1024
 PAIR_N = 512
-BAND_SLOTS = 70                 # tiles per band build (the VERY GOOD scene peaks at 65)
+BAND_SLOTS = 50                 # tiles per band build (src/scene.asm SCN_SLOTS; VERY GOOD builds
+                                # only the letter monster: src/vgland.asm draws the rest)
 PAIR_MAX = (BANK_USE - 0x1000) // 64    # pairs per scene (one bank)
 BLANK = 0x29
 FONT_TILES = range(0x30)        # 0-9, A-Z and punctuation
