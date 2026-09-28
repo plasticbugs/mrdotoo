@@ -78,6 +78,7 @@ def reloc(v, kind):
 
 
 log = []
+claimed = set()        # bytes rewritten by special patches: operand pass skips them
 
 
 def put16(addr, new, why):
@@ -87,6 +88,7 @@ def put16(addr, new, why):
 
 
 def put_bytes(addr, data, why):
+    claimed.update(range(addr, addr + len(data)))
     old = ROM[addr:addr + len(data)].hex()
     ROM[addr:addr + len(data)] = bytes(data)
     log.append(f"{addr:04x}  {old} -> {bytes(data).hex()}  {why}")
@@ -95,6 +97,8 @@ def put_bytes(addr, data, why):
 def patch_code(cm):
     review = []
     for a, size, text, flow, tgt, fields in cm["insns"]:
+        if claimed.intersection(range(a, a + size)):
+            continue                    # replaced wholesale by a special patch
         for off, w, kind in fields:
             if w != 2:
                 continue
@@ -216,13 +220,35 @@ def special_patches():
         put_bytes(a, [0x7E, 0x00, 0x00, 0x00, 0x00], "protection read: always pass")
 
 
+VALIDATE_PATCHES = [
+    # Validation mode: the background pathfinder runs to completion with the
+    # vblank held off, so the logic no longer depends on CPU speed and the
+    # MAME reference (patched identically by tools/diff/mame_record.lua) and
+    # the ColecoVision agree handler by handler. Interrupts come back on where
+    # the pathfinder finishes, through hooks at $0010 / $0018 (see main.asm).
+    (0x013B, [0x00], "validate: pathfinder start, interrupts stay off"),
+    (0x0144, [0x00], "validate: path1 start, interrupts stay off"),
+    (0x0150, [0x00], "validate: path2 start, interrupts stay off"),
+    (0x014C, [0xDF], "validate: path1 done: ret -> rst $18 (ei / ret)"),
+    (0x0154, [0xD7], "validate: path2 done: jr $ -> rst $10 (ei / idle)"),
+]
+
+
 def main():
     cm = json.loads((ROOT / "build" / "codemap.json").read_text())
+    validate = "--validate" in sys.argv
     special_patches()
+    if validate:
+        for a, data, why in VALIDATE_PATCHES:
+            put_bytes(a, data, why)
     review = patch_code(cm)
     missed = patch_tables(cm)
     patch_sound()
     out = ROOT / "build"
+    if validate:
+        (out / "arc_lo_validate.bin").write_bytes(bytes(ROM[0x0000:0x6000]))
+        print("validation image: build/arc_lo_validate.bin")
+        return
     (out / "arc_lo.bin").write_bytes(bytes(ROM[0x0000:0x6000]))
     (out / "arc_hi.bin").write_bytes(bytes(ROM[0x6000:0x8000]))
     (out / "arc_patches.txt").write_text("\n".join(log) + "\n")

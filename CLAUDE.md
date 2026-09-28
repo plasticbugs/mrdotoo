@@ -40,6 +40,20 @@ Arcade-faithful port of Mr. Do! (Universal 1982) to the ColecoVision + Super Gam
 - ColecoVision + Super Game Module, on MegaCart cartridge boards. The user has an SGM and a flash cart for testing real-hardware builds; test on hardware as soon as the renderer exists (the VDP needs ~8µs between VRAM writes during active display, and openMSX doesn't enforce it strictly).
 - The game must detect a missing SGM and show a "Super Game Module required" screen.
 
+## How the arcade program runs (Phase 1)
+- The arcade main ROM runs at its ORIGINAL addresses: `tools/patch_arcade.py` copies $0000-$5FFF into SGM RAM and rewrites only operands that point at moved things (work RAM $E000->$6000, video $8000->$7000, I/O and scroll -> RAM cells, sound data and scene code $6000-$7FFF -> MegaCart window bank 0). Instruction lengths and timing are unchanged. Every patch is listed in `build/arc_patches.txt`.
+- The code map (`tools/codemap.py`) seeds from the Ghidra entries (`tools/data/ghidra_functions.txt`) plus jump-table targets and every instruction MAME executed (`tools/data/extra_entries.txt`). Code missing from the map is left unpatched. That caused a real bug (jump-table state handlers), so after any sweep, re-check that "executed but unmapped" is 0.
+- Constants that only look like addresses (sprite code/colour pairs, positions, bit masks, negative offsets such as `$FFE0`) are listed in `KEEP_IMM` after review. Values of $F000 and up are never relocated unless they are exact scroll-register memory operands.
+- Vblank: every arcade `ei` became `rst $08`. The NMI either enters the arcade handler directly (interrupts were on) or holds the vblank by rewriting $0008 to `jp take_irq`. Delivery mimics the Z80's one-instruction EI delay (`irq_after_ei` finishes the `ret` or `call` that follows the `ei`); the arcade's `ld sp,$EB76` resume path depends on the exact stack layout.
+- **MegaCart hotspot:** reading $FFC0-$FFFF switches banks, so no switchable bank may keep data in its last 64 bytes. `tools/check_rom.py` enforces this on every build. The arcade image is stored 8KB per bank.
+- Arcade writes into ROM addresses are ignored on the board but would corrupt our RAM copy of the code. The known one ($1761, write to $DC1A) is patched out.
+
+## Lockstep validation
+- `make validate FRAMES=n SEED=s` records n vblank handlers in MAME (`tools/diff/mame_record.lua`, scripted random play), replays the same inputs on `build/mrdo_validate.rom` in openMSX (`tools/diff/cv_replay.tcl`), and compares work RAM plus video RAM at the same sync point of every handler (`tools/diff/compare.py`). Relocated pointers held in RAM compare as equal.
+- Validation mode runs the background pathfinder to completion with the vblank held off, identically in both emulators. Otherwise the result depends on CPU speed (the arcade's pathfinder progress per frame is a function of its 4 MHz Z80) and the RAM diverges for timing reasons alone.
+- MAME inputs are injected by the read tap and latched at handler start. MAME's own input system updates once per frame, which can land mid-handler.
+- Debug aids (env vars): `WATCH=addr` (MAME: arcade address; openMSX: CV address) logs writes with PC and handler; `RTRACE`, `ITRACE`, `HTRACE` trace fg-tile reads, input reads and handler entries.
+
 ## Build and test
 - `make`: SjASMPlus builds `build/mrdo.rom` (128KB MegaCart image). `make run` starts openMSX. `make test` boots headless-ish for 4 emulated seconds, prints the self-test verdicts and saves `build/boot.png`.
 - openMSX machine `ColecoVision_SGM`, romtype `ColecoMegaCart`. openMSX Tcl scripts read symbols from `build/mrdo.sym`. Set `throttle on` for a few frames before `screenshot`, otherwise the capture is black.

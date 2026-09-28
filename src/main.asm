@@ -21,8 +21,9 @@
         include "hw.inc"
 
 ARC_HI_BANK     equ 0           ; arcade $6000-$7FFF, mapped at $C000 while it runs
-ARC_LO_BANK_A   equ 1           ; arcade $0000-$3FFF
-ARC_LO_BANK_B   equ 2           ; arcade $4000-$5FFF
+ARC_LO_BANK     equ 1           ; arcade $0000-$5FFF in 8KB pieces, banks 1-3
+; Reading $FFC0-$FFFF switches MegaCart banks, so no bank may keep data in its
+; last 64 bytes: the arcade image is stored 8KB per bank at $C000-$DFFF.
 
 ; --- driver variables (in the arcade ROM's unused padding, never cleared by it) ---
         org DRV_RAM
@@ -37,9 +38,15 @@ coin_hold:      ds 1            ; frames left to hold the coin line low
 inp_override:   ds 1            ; test scripts: nonzero = use inp_p1/inp_p2 as-is
 inp_p1:         ds 1            ; arcade $A000 value while overridden
 inp_p2:         ds 1            ; arcade $A001 value while overridden
+scratch_de:     ds 2            ; irq_after_ei
+repend:         ds 1            ; a vblank arrived while one was being delivered
         assert $ <= DRV_RAM_END
 
+        ifdef VALIDATE
+        output "build/mrdo_validate.rom"
+        else
         output "build/mrdo.rom"
+        endif
 
 ; =============================================================================
 ; SWITCHABLE BANKS  ($C000-$FFFF). Each has its number at $E000 for the boot
@@ -51,19 +58,22 @@ inp_p2:         ds 1            ; arcade $A001 value while overridden
         db 0
         ds $10000-$, $FF
 
-        org $C000                       ; bank 1: arcade $0000-$3FFF
-        incbin "build/arc_lo.bin", 0, $4000   ; fills the bank exactly
-
-        org $C000                       ; bank 2: arcade $4000-$5FFF
-        incbin "build/arc_lo.bin", $4000, $2000
-        org $E000
-        db 2
+        ifdef VALIDATE
+        define ARCIMG_FILE "build/arc_lo_validate.bin"
+        else
+        define ARCIMG_FILE "build/arc_lo.bin"
+        endif
+        dup 3, piece                    ; banks 1-3: arcade $0000-$5FFF, 8KB each
+        org $C000
+        incbin ARCIMG_FILE, piece*$2000, $2000
+        db piece+1                      ; $E000: bank id
         ds $10000-$, $FF
+        edup
 
-        dup MC_FIXED-3, n               ; banks 3..: spare
+        dup MC_FIXED-4, n               ; banks 4..: spare
         org $C000
         ds $2000, $FF
-        db n+3
+        db n+4
         ds $10000-$, $FF
         edup
 
@@ -120,6 +130,11 @@ start:
         call vdp_init
         call load_arcade
         call install_hooks
+        ld hl, ARC_VRAM         ; video RAM starts zeroed, as MAME powers it up
+        ld de, ARC_VRAM+1       ; (the arcade clears its work RAM itself)
+        ld bc, $0FFF
+        ld (hl), 0
+        ldir
 
         ld hl, DRV_RAM          ; driver variables start clean
         ld de, DRV_RAM+1
@@ -140,27 +155,35 @@ start:
 
 ; Copy the patched arcade image into RAM at $0000-$5FFF.
 load_arcade:
-        ld a, ARC_LO_BANK_A
-        call select_bank
-        ld hl, $C000
         ld de, $0000
-        ld bc, $4000
-        ldir
-        ld a, ARC_LO_BANK_B
+        ld a, ARC_LO_BANK
+.piece: push af
         call select_bank
         ld hl, $C000
-        ld de, $4000
         ld bc, $2000
-        ldir
+        ldir                    ; DE advances to the next 8KB
+        pop af
+        inc a
+        cp ARC_LO_BANK+3
+        jr nz, .piece
         ret
 
 ; Vectors in the (now RAM) arcade image. $0008-$0037 and $0066 are unused by the
 ; arcade ($0066 held a bare `retn`).
 install_hooks:
-        ld hl, $0008
-        ld (hl), $FB            ; $0008: ei / ret  (rst $08 = the arcade's `ei`)
-        inc hl
-        ld (hl), $C9
+        ld hl, ei_hook          ; $0008-$000E: see ei_hook
+        ld de, $0008
+        ld bc, ei_hook_len
+        ldir
+        ifdef VALIDATE
+        ld hl, validate_hooks   ; $0010 and $0018, see validate_hooks
+        ld de, $0010
+        ld bc, 5
+        ldir
+        ld de, $0018
+        ld bc, 4
+        ldir
+        endif
         ld hl, $0066
         ld (hl), $C3            ; $0066: jp nmi
         inc hl
@@ -169,14 +192,35 @@ install_hooks:
         ld (hl), high nmi
         ret
 
+        ifdef VALIDATE
+; Validation mode: where the pathfinder finishes, drop the rst's return
+; address and re-enable interrupts. The MAME reference
+; (tools/diff/mame_record.lua) has the same bytes with a plain `ei`.
+validate_hooks:
+        db $33, $33, $CF, $18, $FE  ; $0010: inc sp / inc sp / ei (rst $08) / jr $
+        db $33, $33, $CF, $C9       ; $0018: inc sp / inc sp / ei (rst $08) / ret
+        endif
+
+; $0008 hook, reached by rst $08 (every arcade `ei`). The byte at $0009 picks
+; the path, so the NMI can switch it with one (atomic) write.
+HOOK_SEL        equ $0009
+HOOK_PENDING    equ $0C - $0A       ; jr offset to the jp take_irq
+ei_hook:
+        jr $+2                  ; $0008: offset byte at $0009 (0 = plain)
+        ei                      ; $000A
+        ret                     ; $000B
+        jp take_irq             ; $000C
+ei_hook_len     equ $ - ei_hook
+        assert ei_hook_len <= 8
+
 ; -----------------------------------------------------------------------------
 ; VBLANK
 ;
 ; The arcade expects a vblank IRQ that stays asserted until taken: if it
 ; arrives while the handler is still running (interrupts off), it is taken
 ; the moment the handler re-enables interrupts. Every `ei` in the arcade code
-; was patched to `rst $08`, and $0008 holds `ei / ret`. When a vblank has to
-; wait, the NMI rewrites $0008 to `jp take_irq`, so the next `ei` delivers it.
+; was patched to `rst $08` (the hook above). When a vblank has to wait, the
+; NMI sets HOOK_SEL, so the next `ei` delivers it through take_irq.
 ; -----------------------------------------------------------------------------
 nmi:
         push af
@@ -193,6 +237,28 @@ nmi:
 
         ld a, i                 ; P/V = IFF2 = the arcade's interrupt enable
         jp po, .hold
+        ld hl, 8                ; interrupted between the hook's `ei` and
+        add hl, sp              ; `ret` (PC $000B)? Then finish that `ret`
+        ld a, (hl)              ; (and the arcade instruction after the
+        cp $0B                  ; `ei`) before taking the vblank.
+        jr nz, .direct
+        inc hl
+        ld a, (hl)
+        or a
+        jr nz, .direct
+        pop hl
+        pop de
+        pop bc
+        pop af
+        di
+        inc sp                  ; drop the NMI's return to $000B; (sp) = R
+        inc sp
+        xor a
+        ld (HOOK_SEL), a        ; delivering now: nothing left pending
+        jp irq_after_ei
+.direct:
+        xor a                   ; a vblank held earlier is delivered now
+        ld (HOOK_SEL), a
         pop hl                  ; take it now: the interrupted PC is on the
         pop de                  ; stack, exactly where an IRQ would put it
         pop bc
@@ -203,11 +269,32 @@ nmi:
 .hold:  ld hl, (deferred_cnt)
         inc hl
         ld (deferred_cnt), hl
-        ld a, $C3               ; $0008: jp take_irq
-        ld ($0008), a
-        ld hl, take_irq
-        ld ($0009), hl
-        pop hl
+        ld hl, 8                ; interrupted PC
+        add hl, sp
+        ld a, (hl)
+        inc hl
+        ld h, (hl)
+        ld l, a
+        ld de, -$0008           ; inside the hook ($0008-$000E), or in
+        add hl, de              ; take_irq before it acknowledged? Then the
+        ld de, 7                ; held vblank is being delivered right now:
+        or a                    ; ask take_irq to hold this new one again.
+        sbc hl, de
+        jr c, .repend
+        add hl, de
+        ld de, $0008 - take_irq
+        add hl, de
+        ld de, take_irq.acked - take_irq
+        or a
+        sbc hl, de
+        jr c, .repend
+        ld a, HOOK_PENDING      ; one byte: the next `ei` takes the vblank
+        ld (HOOK_SEL), a
+        jr .held
+.repend:
+        ld a, 1
+        ld (repend), a
+.held:  pop hl
         pop de
         pop bc
         pop af
@@ -215,14 +302,50 @@ nmi:
 
 ; Reached through the arcade's `ei` (rst $08) while a vblank is waiting.
 ; Interrupts are off; the return address on the stack is the instruction
-; after the `ei`, which is where the arcade's IRQ would have returned to.
+; after the `ei`. An NMI landing in the hook or before `.acked` sets repend
+; instead of HOOK_SEL, since the store below would erase it.
 take_irq:
         push af
-        ld a, $FB               ; back to ei / ret
-        ld ($0008), a
-        ld a, $C9
-        ld ($0009), a
-        pop af
+        xor a
+        ld (HOOK_SEL), a        ; acknowledge: the next `ei` is plain again
+.acked: ld a, (repend)          ; a vblank that arrived before the line
+        or a                    ; above is held again, not lost (the
+        jr z, .none             ; arcade's IRQ is level-triggered)
+        xor a
+        ld (repend), a
+        ld a, HOOK_PENDING
+        ld (HOOK_SEL), a
+.none:  pop af
+        ; fall through
+
+; Take the vblank the way a Z80 would after `ei`: only once the NEXT
+; instruction has run. On entry (sp) = R, the address of that instruction.
+; In the arcade it is always one of: ret ($0136), call nn ($013B/$0144/$0150),
+; or an idle jr ($00AB, validation hooks). All registers are preserved.
+irq_after_ei:
+        ex (sp), hl             ; HL = R, (sp) = caller's HL
+        push af
+        ld a, (hl)
+        cp $C9                  ; ret: the IRQ returns to the ret's target
+        jr z, .ret
+        cp $CD                  ; call nn: push R+3, the IRQ returns into nn
+        jr z, .call
+        pop af                  ; anything else (the idle jr): return to R
+        ex (sp), hl
+        jr irq_enter
+.ret:   pop af
+        pop hl                  ; stack top is now the ret's target
+        jr irq_enter
+.call:  pop af
+        ld (scratch_de), de
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)              ; DE = call target
+        inc hl                  ; HL = R+3, the call's return address
+        ex (sp), hl             ; (sp) = R+3, HL = caller's HL
+        push de                 ; the IRQ returns into the called routine
+        ld de, (scratch_de)
 irq_enter:
         push hl
         ld hl, (irq_count)
