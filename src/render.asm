@@ -870,11 +870,15 @@ scr_find:
 ; A non-dirt cell. HL -> its bg tile, A = the bg tile, D = TBLA page.
 ; A dessert plate (the center prize: bg attribute bit 7 = character bank 1,
 ; tiles 0-47) has a fixed code in every set (tools/gen_tiles.py): returns
-; carry and A = DESSERT_BASE + tile. Otherwise no carry and D = the TBLB
+; carry and A = DESSERT_BASE + tile; so has the dessert's score (attribute 9,
+; tiles $15-$21, arcade $30FD): SCORE_BASE + tile - $15. Otherwise no carry
+; and D = the TBLB
 ; page. Only the plate's 2x2 cells ($1CF/$1D0/$1EF/$1F0, arcade $3057) are
 ; checked: other screens (the instructions' tunnel ends) use bank-1 tiles
 ; 0-47 too. Preserves BC, HL; clobbers E.
 DESSERT_BASE    equ 176
+SCORE_BASE      equ 163         ; dessert score bg tiles $15-$21, attribute 9
+SCORE_ATTR      equ $09
 PLATE_H         equ high (ARC_VRAM + $400 + $1CF)
         assert PLATE_H == high (ARC_VRAM + $400 + $1F0)
 not_dirt:
@@ -892,16 +896,25 @@ not_dirt:
         sub 4
         ld h, a
         ld a, (hl)
+        inc h
+        inc h
+        inc h
+        inc h
+        cp SCORE_ATTR
+        jr z, .score
         add a, a                ; bit 7 -> carry
-        inc h                   ; (inc keeps carry)
-        inc h
-        inc h
-        inc h
         jr nc, .tblb
         ld a, e
         cp 48
         jr nc, .tblb
         add a, DESSERT_BASE
+        scf
+        ret
+.score: ld a, e                 ; the dessert's score: "00" and "10"-"80"
+        sub $15
+        cp $22 - $15
+        jr nc, .tblb
+        add a, SCORE_BASE
         scf
         ret
 .tblb:  inc d

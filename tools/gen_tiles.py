@@ -35,6 +35,9 @@ ROM = (DIS / "mrdo_main.bin").read_bytes()
 
 USE_HACK_CHERRIES = False   # the CV romhack's cherry art instead of the arcade's
 MAX = 224
+SCORE_BASE = 163            # codes 163-175: the dessert score bg tiles $15-$21 (attr 9)
+SCORE_TILES = range(0x15, 0x22)
+SCORE_ATTR = 0x09
 DESSERT_BASE = 176          # codes 176-223: the 48 dessert plate tiles                   # codes 0..223 per set; 224..255 stay free for the HUD
 SET_BYTES = 2 + MAX * 16
 FONT_ATTR = 0x09
@@ -164,7 +167,7 @@ def main():
 
     OUT.mkdir(parents=True, exist_ok=True)
     sets, tbla_all, tblb_all, dirt = bytearray(), bytearray(), bytearray(), bytearray()
-    counts = []
+    counts, used = [], []
     for dirt_pair in cways:
         codes, pats, cols = {}, [], []
 
@@ -190,10 +193,19 @@ def main():
         # sequence table ($320D). They get fixed codes DESSERT_BASE + tile in
         # every set, so the renderer needs no lookup: a non-dirt cell whose
         # bg attribute has bit 7 set shows code DESSERT_BASE + bg tile.
-        assert len(pats) <= DESSERT_BASE, f"colourway {dirt_pair}: {len(pats)} codes > {DESSERT_BASE}"
-        while len(pats) < DESSERT_BASE:
+        used.append(len(pats))
+        # The dessert's score (arcade $30FD): bg tile $16 + food ("10" ...
+        # "80") and $15 ("00"), attribute 9, in the plate's left cells. Fixed
+        # codes SCORE_BASE + tile - $15 (src/render.asm not_dirt).
+        assert len(pats) <= SCORE_BASE, f"colourway {dirt_pair}: {len(pats)} codes > {SCORE_BASE}"
+        while len(pats) < SCORE_BASE:
             pats.append(bytes(8))
             cols.append(bytes([0x11] * 8))
+        for t in SCORE_TILES:
+            p_, c_ = compose((SCORE_ATTR, t), BLANK[1], 0)
+            pats.append(p_)
+            cols.append(c_)
+        assert len(pats) == DESSERT_BASE
         # Foods with romhack art use its full-colour 2x2 tiles, and their
         # sprite is left empty (tools/gen_sprites_hack.py): the arcade's plate
         # plus sprite pair drawn as two 2-colour layers garbled the dessert.
@@ -229,6 +241,7 @@ def main():
     tables += dirt
     assert len(tables) <= 0x3FC0, "tables must stay clear of the $FFC0 hotspot"
     (OUT / "tables.bin").write_bytes(tables)
+    print(f"before the fixed codes: max {max(used)}")
     print(f"31 colourways, codes per set: min {min(counts)} max {max(counts)} "
           f"(limit {MAX}); sets.bin {len(sets)} bytes")
     preview(sets, tbla_all, tblb_all, cways)
