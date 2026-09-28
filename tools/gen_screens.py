@@ -53,9 +53,12 @@ FONT_TILES = range(0x30)        # 0-9, A-Z and punctuation
 # instruction screen too, and congrats (the CONGRATULATIONS opening the diamond
 # and EXTRA scenes share) stays on screen under both.
 SCREENS = ["instruction", "title", "verygood", "hiscore", "wonderful", "diamond", "extra", "congrats"]
+# Screens shown as a romhack image instead (tools/gen_images.py): name -> bank
+# (src/image.asm IMG_BANK_EXTRA = MC_FIXED - 2)
+IMAGES = {"extra": 29}
 # INDEX entry (16 bytes): sig cell (2), sig fg tile, cam, set bank, set address
 # (2), hash bank, hash page, band first screen row, band rows, pair hash bank
-# (0 = no band), slot base (= static tile count), 3 spare
+# (0 = no band), slot base (= static tile count), image bank (0 = none), 2 spare
 INDEX = 16
 
 
@@ -235,7 +238,7 @@ def main():
         nrows = band[1] - band[0] + 1 if band else 0
         assert not band or 0 <= row0 and row0 + nrows <= 24
         index += bytes([sig[0] & 0xFF, sig[0] >> 8, sig[1], cam, sb, sa & 0xFF, sa >> 8,
-                        hb, ha >> 8, row0, nrows, pbank, nkept, 0, 0, 0])
+                        hb, ha >> 8, row0, nrows, pbank, nkept, IMAGES.get(name, 0), 0, 0])
     data = banks.data()
     (OUT / "banks.bin").write_bytes(data)
     (OUT / "banks.inc").write_text(f"SCR_BANKS equ {len(data) // BANK}\n")

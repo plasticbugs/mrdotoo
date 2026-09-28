@@ -96,6 +96,8 @@ spr_new:        ds 1            ; the arcade copied new sprite data (opt_spr_cop
 arc_idle:       ds 1            ; this NMI did not interrupt the arcade handler
 spr_cam:        ds 1            ; camera of the last sprite pass
 sat_n:          ds 1            ; SAT entries written this pass (32 max)
+img_bank:       ds 1            ; image mode: the image's bank
+img_phase:      ds 1            ;   flag frame
 scn_flush2:     ds 1            ; a heavy build's colours and names are due
 scn_brow:       ds 1            ; next band row of the build under way (0 = none)
 scn_lastn:      ds 1            ; tiles of the previous build
@@ -187,10 +189,14 @@ pf_drops:       ds 2            ; vblanks skipped so the pathfinder could run
         incbin "build/screens/banks.bin", n*$4000, $4000
         edup
 
-        dup MC_FIXED-16-SCR_BANKS, n    ; free
+        dup MC_FIXED-17-SCR_BANKS, n    ; free
         org $C000
         ds $10000-$, $FF
         edup
+
+        org $C000                       ; bank 29 (IMG_BANK_EXTRA): the romhack's
+        incbin "build/images/extra.bin" ; EXTRA screen (tools/gen_images.py)
+        ds $10000-$, $FF
 
         org $C000                       ; bank 30 (SPR_BANK_W): Mr. Do's white
         incbin "build/sprites/mrdo_white.bin", 0, $2000  ; overlay patterns
@@ -864,6 +870,7 @@ font_len equ $-font
         include "render.asm"
         include "sprites.asm"
         include "scene.asm"
+        include "image.asm"
 
         assert $ <= OPT_BASE
         ds OPT_BASE-$, $FF

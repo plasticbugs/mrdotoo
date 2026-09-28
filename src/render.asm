@@ -211,12 +211,16 @@ render:
 render_body:
         call scene_vblank       ; a cutscene band's new tiles and names
         ld a, (mode)
+        cp MODE_IMAGE
+        jr z, .image
         or a
         call nz, sprites_update ; first, inside vblank
         call check_colourway
         ld a, (mode)
         or a
         ret z                   ; no tile set yet
+        cp MODE_IMAGE
+        ret z                   ; (an image just went up: nothing to draw)
         cp MODE_SCREEN
         ld a, TBL_BANK
         jr nz, .bank
@@ -257,6 +261,11 @@ render_body:
         ld a, FLIP_WAIT_MAX     ; into it too before it is shown: the queue
         ld (flip_wait), a       ; up to here.
         jr .done
+.image: call check_colourway   ; (a new screen or playfield ends it)
+        ld a, (mode)
+        cp MODE_IMAGE
+        jp z, image_tick
+        ret
 .drain: call drain_queue
         ld a, (flip_wait)
         or a
@@ -361,7 +370,8 @@ check_colourway:
         ld a, (cw)
         cp d
         jr z, .out              ; same tile set (colourways can share a pair)
-.new:   ld a, d
+.new:   call leave_image
+        ld a, d
         ld (cw), a
         ld a, MODE_PLAYFIELD
         ld (mode), a
@@ -417,11 +427,14 @@ check_screens:
         jr .next
 .hit:   ld a, (mode)
         cp MODE_SCREEN
+        jr z, .same
+        cp MODE_IMAGE
         jr nz, .new
-        ld a, (scr)
+.same:  ld a, (scr)
         cp c
         ret z
-.new:   ld a, $FF               ; forget the last lookup (new hash table)
+.new:   call leave_image
+        ld a, $FF               ; forget the last lookup (new hash table)
         ld (scr_last), a
         ld (scr_last+1), a
         ld a, c
@@ -447,11 +460,19 @@ check_screens:
         ld (scn_flush2), a
         ld (scn_lastn), a
         ld (scn_fill), a        ; fill its caches first
+        ld a, (hl)              ; entry +13: image bank (0 = none)
+        or a
+        jr nz, .image
         ld a, MODE_SCREEN
         ld (mode), a
         pop hl
         pop af
         call upload_start
+        ld a, ARC_HI_BANK
+        jp select_bank
+.image: pop hl
+        pop hl
+        call image_show
         ld a, ARC_HI_BANK
         jp select_bank
 
