@@ -34,7 +34,10 @@ vgl_done        equ vgl_on + 3      ; bytes of the step done (2)
 vgl_base        equ vgl_on + 5      ; first tile code
 vgl_phase       equ vgl_on + 6      ; frame
 nmi_late        equ vgl_on + 7      ; main.asm: an overrunning NMI owes the VDP ack
-        assert nmi_late < $2F00
+img_d           equ vgl_on + 8      ; image.asm: EXTRA pan, tiles left to go
+img_bd          equ vgl_on + 9      ;   the step being built
+img_brow        equ vgl_on + 10     ;   next row of it ($FF: none)
+        assert img_brow < $2F00
 
 ; From scene_update (a screen with a band): NZ while the picture is up (no
 ; band builds then). Starts it once the VERY GOOD scroll has come back to 0

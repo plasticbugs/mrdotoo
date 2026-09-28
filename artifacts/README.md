@@ -42,3 +42,4 @@ recordings, one folder per milestone. Files here are committed; `build/` is not.
 - `15-hud/hiscore_entry_letter.png`: the name-entry row with the initial being chosen (fg attr $22, full font incl. the heart and '.') now in the high-score screen's tile set.
 - `15-hud/next_letter_marker.png`: the next EXTRA letter (the arcade's letter-monster sprite on the box) marked white on blue in the panel.
 - `09-very-good-cutscene/vg_landed_romhack_frame1/2.png`: once VERY GOOD's characters land, the romhack's picture (tiles + black cover sprites, two frames) replaces the arcade tiles; `vg_arriving_arcade_tiles.png` is the scroll-in just before.
+- `16-extra-pan/`: EXTRA: the romhack picture from the scene's first frame, its landscape panning 8 tiles in step with the arcade's scroll (CV frames every 0.1 s), and the arcade's pan in MAME for reference.

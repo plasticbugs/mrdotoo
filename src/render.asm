@@ -183,6 +183,7 @@ render_init:
         ld (vgl_on), a
         ld (vgl_armed), a
         ld (nmi_late), a
+        ld (img_d), a
         ld (q_head), a
         ld (q_tail), a
         ld (redraw_all), a
@@ -218,6 +219,7 @@ render:
 render_body:
         call scene_vblank       ; a cutscene band's new tiles and names
         call late_ack           ; (safe points: see nmi)
+        call extra_check        ; the EXTRA scene starting: its picture
         ld a, (mode)
         cp MODE_IMAGE
         jp z, .image
@@ -464,6 +466,13 @@ check_screens:
         ld a, (cw_valid)
         or a
         ret nz
+        ld a, (mode)            ; the EXTRA picture stays up for the whole
+        cp MODE_IMAGE           ; scene (its captured screens are not used)
+        jr nz, .look
+        ld a, (ARC_WORK + $0C7)
+        cp WHY_EXTRA
+        ret z
+.look:
         ld hl, scr_index
         ld c, 0
 .next:  ld a, c
