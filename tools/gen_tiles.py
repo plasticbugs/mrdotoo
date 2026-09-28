@@ -34,7 +34,8 @@ OUT = ROOT / "build" / "tiles"
 ROM = (DIS / "mrdo_main.bin").read_bytes()
 
 USE_HACK_CHERRIES = False   # the CV romhack's cherry art instead of the arcade's
-MAX = 224                   # codes 0..223 per set; 224..255 stay free for the HUD
+MAX = 224
+DESSERT_BASE = 176          # codes 176-223: the 48 dessert plate tiles                   # codes 0..223 per set; 224..255 stay free for the HUD
 SET_BYTES = 2 + MAX * 16
 FONT_ATTR = 0x09
 CENTER_ATTR = CENTER_ART[1]
@@ -63,9 +64,17 @@ GAMEPLAY_FG = sorted((set(TUNNEL_TILES) | set(CHERRY_TILES) | set(CENTER_ART[2])
 FONT = list(range(0x24))    # 0-9, A-Z
 
 
+REDS = (6, 8, 9)   # TMS dark red, medium red, light red
+
+
 def tms_index(rgb):
+    r, g, b = rgb
+    # A clearly red colour stays red: plain nearest-RGB sends dark reds such
+    # as the chomper session's (88,0,0) dirt to black, which turned the whole
+    # playfield black in chomper mode.
+    candidates = REDS if r >= 64 and r > 2 * g and r > 2 * b else range(1, 16)
     best, bi = None, 1
-    for i in range(1, 16):
+    for i in candidates:
         t = TMS[i]
         d = sum((a - b) ** 2 for a, b in zip(rgb, t))
         if best is None or d < best:
@@ -175,6 +184,21 @@ def main():
             tblb[t] = code_of(compose(blank_bg, t, attr))
         for t in FONT:          # text over black (HUD / messages in the field)
             tblb[t] = code_of(compose(blank_bg, t, FONT_ATTR))
+        # Dessert plates (the center prize): background tiles phase*4+k in
+        # character bank 1, each phase with its attribute from the arcade's
+        # sequence table ($320D). They get fixed codes DESSERT_BASE + tile in
+        # every set, so the renderer needs no lookup: a non-dirt cell whose
+        # bg attribute has bit 7 set shows code DESSERT_BASE + bg tile.
+        assert len(pats) <= DESSERT_BASE, f"colourway {dirt_pair}: {len(pats)} codes > {DESSERT_BASE}"
+        while len(pats) < DESSERT_BASE:
+            pats.append(bytes(8))
+            cols.append(bytes([0x11] * 8))
+        seqtbl = ROM[0x320D:0x3219]
+        for t in range(48):
+            attr = seqtbl[t // 4]
+            pats_cols = compose((attr, t), BLANK[1], 0)
+            pats.append(pats_cols[0])
+            cols.append(pats_cols[1])
         assert len(pats) <= MAX, f"colourway {dirt_pair}: {len(pats)} codes > {MAX}"
         counts.append(len(pats))
         blob = bytearray([len(pats), 0])

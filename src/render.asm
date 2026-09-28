@@ -589,16 +589,19 @@ draw_run:
         ld a, (hl)              ; bg tile
         cp c
         jr z, .dirt
-        inc d                   ; TBLB
+        call not_dirt           ; TBLB page, or A = a dessert plate code (C)
+        jr c, .out
 .dirt:  ld a, h
         add a, 8                ; fg tile layer is $800 above the bg tile layer
         ld h, a
         ld e, (hl)
         ld a, (de)
-        out (VDP_DATA), a
+        ld e, a
         ld a, h
         sub 8
         ld h, a
+        ld a, e
+.out:   out (VDP_DATA), a
         ld a, l
         add a, 32
         ld l, a
@@ -732,6 +735,34 @@ scr_lookup:
         ld (scr_last + 4), a
         ret
 
+; A non-dirt cell. HL -> its bg tile, A = the bg tile, D = TBLA page.
+; A dessert plate (the center prize: bg attribute bit 7 = character bank 1,
+; tiles 0-47) has a fixed code in every set (tools/gen_tiles.py): returns
+; carry and A = DESSERT_BASE + tile. Otherwise no carry and D = the TBLB
+; page. Preserves BC, HL; clobbers E.
+DESSERT_BASE    equ 176
+not_dirt:
+        ld e, a
+        ld a, h                 ; bg attribute is $400 below the bg tile
+        sub 4
+        ld h, a
+        ld a, (hl)
+        add a, a                ; bit 7 -> carry
+        inc h                   ; (inc keeps carry)
+        inc h
+        inc h
+        inc h
+        jr nc, .tblb
+        ld a, e
+        cp 48
+        jr nc, .tblb
+        add a, DESSERT_BASE
+        scf
+        ret
+.tblb:  inc d
+        or a                    ; no carry
+        ret
+
 ; -----------------------------------------------------------------------------
 ; Draw up to DRAIN_MAX queued cells.
 drain_queue:
@@ -806,7 +837,10 @@ draw_cell:
         ld a, (hl)
         cp c
         jr z, .dirt
-        inc d
+        call not_dirt
+        jr nc, .dirt
+        out (VDP_DATA), a
+        ret
 .dirt:  ld a, h
         add a, 8
         ld h, a
