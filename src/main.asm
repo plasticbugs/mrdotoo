@@ -40,6 +40,9 @@ crowd_idx:      ds CROWD_MAX    ; crowded sprites: spr_list offsets
         assert high crowd_idx == high (crowd_idx + CROWD_MAX - 1)
 scr_last:       ds 5            ; last looked-up screen cell key + its code
 pin_list:       ds SPR_PIN_MAX  ; spr_list offsets of pinned entries
+pin_code:       ds SPR_PIN_MAX  ; their arcade code and attribute (for Mr. Do's
+pin_attr:       ds SPR_PIN_MAX  ; white overlay)
+pin_ovname:     ds SPR_PIN_MAX  ; its overlay's SAT name ($FF: none)
         assert high pin_list == high (pin_list + SPR_PIN_MAX - 1)
         assert high scr_last == high (scr_last + 4)
 frame_cnt:      ds 2            ; +1 per vblank
@@ -92,6 +95,7 @@ scn_fast:       ds 1            ; 8-byte groups the flush may still write back t
 spr_new:        ds 1            ; the arcade copied new sprite data (opt_spr_copy)
 arc_idle:       ds 1            ; this NMI did not interrupt the arcade handler
 spr_cam:        ds 1            ; camera of the last sprite pass
+sat_n:          ds 1            ; SAT entries written this pass (32 max)
 scn_flush2:     ds 1            ; a heavy build's colours and names are due
 scn_brow:       ds 1            ; next band row of the build under way (0 = none)
 scn_lastn:      ds 1            ; tiles of the previous build
@@ -170,6 +174,7 @@ pf_drops:       ds 2            ; vblanks skipped so the pathfinder could run
         incbin "build/sprites/pat.bin", 0, $2000
         incbin "build/sprites/col.bin"
         incbin "build/sprites/pin.bin"
+        incbin "build/sprites/mrdo_white.bin", $2000, 64   ; SPR_WHITE: has white pixels
         ds $10000-$, $FF
 
         org $C000                       ; bank 14: sprite patterns, codes 64-127
@@ -182,10 +187,14 @@ pf_drops:       ds 2            ; vblanks skipped so the pathfinder could run
         incbin "build/screens/banks.bin", n*$4000, $4000
         edup
 
-        dup MC_FIXED-15-SCR_BANKS, n    ; free
+        dup MC_FIXED-16-SCR_BANKS, n    ; free
         org $C000
         ds $10000-$, $FF
         edup
+
+        org $C000                       ; bank 30 (SPR_BANK_W): Mr. Do's white
+        incbin "build/sprites/mrdo_white.bin", 0, $2000  ; overlay patterns
+        ds $10000-$, $FF
 
 ; =============================================================================
 ; FIXED BANK  ($8000-$BFFF) - last 16KB of the image

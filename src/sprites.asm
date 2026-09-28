@@ -13,6 +13,9 @@
 
 SPR_BANK_A      equ 13          ; patterns for codes 0-63, and the colour table
 SPR_BANK_B      equ 14          ; patterns for codes 64-127
+SPR_BANK_W      equ MC_FIXED-1  ; Mr. Do's white overlays: pseudo codes $80-$BF
+SPR_WHITE       equ $E880       ; in SPR_BANK_A: 64 x (1 = the code has white)
+WHITE_TMS       equ 15
 SPR_COLOURS     equ $E000       ; in SPR_BANK_A: 128 codes x 16 colour lines
 SPR_PIN         equ $E800       ; in SPR_BANK_A: 128 x (SPR_PINNED or 0)
 VR_SPRMAP       equ $1C00       ; key -> slot+1 (0 = not cached)
@@ -235,29 +238,153 @@ sprites_update:
         jp nc, sprites_prio
         inc l
         djnz .cr
-        ld hl, VR_SAT           ; no: straight out
-        call vdp_set_write
+        call sat_begin          ; no: Mr. Do's overlays, then the list as is
+        ld a, (sat_n)           ; (at most 32 entries in all)
+        neg
+        add a, 32
+        add a, a
+        add a, a
+        ld b, a                 ; B = room in bytes
         ld a, (spr_out)
-        or a
+        cp b
+        jr c, .fit
+        ld a, b
+.fit:   or a
         jr z, spr_term
         ld b, a
+        rrca
+        rrca
+        ld hl, sat_n
+        add a, (hl)
+        ld (hl), a
         ld c, VDP_DATA
         ld hl, spr_list
 .out:   outi                    ; 32 T per byte: safe outside vblank too (the
         nop                     ; TMS9918 needs ~29 T between accesses during
         jr nz, .out             ; active display)
 spr_term:
-        ld a, (spr_out)
-        cp 32*4
-        ret z
+        ld a, (sat_n)
+        cp 32
+        ret nc
         ld a, SAT_END
         out (VDP_DATA), a
         ret
 
-; A = colour | pinned, DE -> the colour byte of this list entry. Records the
-; entry's offset in pin_list. Preserves AF, BC, DE, HL.
+; SAT write address, count 0, then an overlay sprite with Mr. Do's white
+; pixels in front of (before) each pinned Mr. Do entry that has any. The
+; overlay slots are resolved first: a lookup moves the VDP address.
+sat_begin:
+        ld a, (pin_n)
+        or a
+        jr z, .sat
+        ld b, a
+        ld c, 0                 ; C = pin index
+.res:   push bc
+        ld hl, pin_code
+        ld a, l
+        add a, c
+        ld l, a
+        ld a, (hl)              ; code: Mr. Do's are $00-$26
+        ld d, $FF               ; (no overlay)
+        cp $40
+        jr nc, .put
+        ld e, a
+        push de
+        ld d, 0
+        ld hl, SPR_WHITE
+        add hl, de
+        ld a, (hl)
+        pop de
+        or a
+        jr z, .put
+        ld hl, pin_attr
+        ld a, l
+        add a, c
+        ld l, a
+        ld c, (hl)              ; attribute (flips in bits 4-5)
+        ld a, e
+        call overlay_slot       ; A = slot
+        add a, a
+        add a, a
+        ld d, a                 ; D = name
+.put:   pop bc
+        push bc
+        ld hl, pin_ovname
+        ld a, l
+        add a, c
+        ld l, a
+        ld (hl), d
+        pop bc
+        inc c
+        djnz .res
+.sat:   ld hl, VR_SAT
+        call vdp_set_write
+        xor a
+        ld (sat_n), a
+        ld a, (pin_n)
+        or a
+        ret z
+        ld b, a
+        ld c, 0
+.ov:    ld hl, pin_ovname
+        ld a, l
+        add a, c
+        ld l, a
+        ld d, (hl)
+        ld a, d
+        cp $FF
+        jr z, .next
+        ld hl, pin_list
+        ld a, l
+        add a, c
+        ld l, a
+        ld l, (hl)
+        ld h, high spr_list     ; HL -> Mr. Do's list entry
+        ld a, (hl)              ; y
+        out (VDP_DATA), a
+        inc l
+        nop
+        ld a, (hl)              ; x
+        out (VDP_DATA), a
+        inc l
+        inc l
+        ld a, d                 ; name
+        out (VDP_DATA), a
+        ld a, (hl)              ; early clock bit of Mr. Do's colour byte
+        and $80
+        or WHITE_TMS
+        out (VDP_DATA), a
+        ld hl, sat_n
+        inc (hl)
+.next:  inc c
+        djnz .ov
+        ret
+
+; A = arcade code ($00-$3F), C = its attribute. The cache slot of its white
+; overlay pattern (pseudo code $80 + code, SPR_BANK_W). SPR_BANK_A is mapped
+; on entry and exit.
+overlay_slot:
+        add a, $80
+        ld l, a
+        ld h, 0
+        add hl, hl
+        add hl, hl
+        ld a, c
+        rrca
+        rrca
+        rrca
+        rrca
+        and 3
+        or l
+        ld l, a                 ; HL = key $200-$2FF
+        jp sprite_slot.key
+
+; A = colour | pinned, DE -> the colour byte of this list entry, HL -> the
+; arcade entry (code). Records the entry's offset in pin_list and its code
+; and attribute. Preserves AF, BC, DE, HL.
 spr_pin:
         push af
+        push bc
         push hl
         ld a, (pin_n)
         cp SPR_PIN_MAX
@@ -265,20 +392,31 @@ spr_pin:
         inc a
         ld (pin_n), a
         dec a
+        ld b, (hl)              ; HL -> the arcade entry's code
+        inc l
+        inc l
+        ld c, (hl)              ;   and attribute
         add a, low pin_list
         ld l, a
         ld h, high pin_list
         ld a, e
         sub 3                   ; start of the entry
         ld (hl), a
+        ld a, l
+        add a, pin_code - pin_list
+        ld l, a
+        ld (hl), b
+        add a, pin_attr - pin_code
+        ld l, a
+        ld (hl), c
 .full:  pop hl
+        pop bc
         pop af
         ret
 
 ; A crowded frame: pinned first, uncrowded next, the crowded ones rotated.
 sprites_prio:
-        ld hl, VR_SAT
-        call vdp_set_write
+        call sat_begin          ; 0: Mr. Do's overlays
         ld a, (pin_n)           ; 1: pinned
         or a
         jr z, .p2
@@ -391,6 +529,11 @@ spr_is_pinned:
 ; HL -> spr_list entry: write its four SAT bytes >= 30 T apart (safe outside
 ; vblank). Preserves HL.
 spr_out4:
+        ld a, (sat_n)           ; 32 entries at most (overlays count too)
+        cp 32
+        ret nc
+        inc a
+        ld (sat_n), a
         ld a, (hl)
         out (VDP_DATA), a
         inc l
@@ -496,7 +639,7 @@ sprite_slot:
         and 3
         or l
         ld l, a                 ; HL = key 0-511
-        ld (spr_key), hl
+.key:   ld (spr_key), hl
         ld de, VR_SPRMAP        ; slot+1 from the VRAM map
         add hl, de
         ld a, l
@@ -602,11 +745,14 @@ sprite_load:
         out (VDP_DATA), a
         pop bc
         ; pattern: bank A (codes 0-63) or B, at $C000 + (key & $FF) * 32
-        ld a, b
-        or a
+        ld a, b                 ; key high byte: 0 bank A, 1 bank B,
+        or a                    ; 2 Mr. Do's white overlays
         ld a, SPR_BANK_A
         jr z, .bank
+        dec b
         ld a, SPR_BANK_B
+        jr z, .bank
+        ld a, SPR_BANK_W
 .bank:  push de
         call select_bank
         pop de

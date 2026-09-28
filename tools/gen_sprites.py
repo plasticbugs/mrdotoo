@@ -14,6 +14,7 @@ that code's shape.
 Output (build/sprites/):
   pat.bin   512 x 32: pattern for (code << 2 | flipy << 1 | flipx)
   col.bin   128 x 16: TMS colour for (code, colour line)
+  mrdo_white.bin  Mr. Do's white pixels (overlay sprite), see main()
   sheet.png every code, flip 0, in its usual colour line
 """
 import os
@@ -101,6 +102,22 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "pat.bin").write_bytes(pat)
     (OUT / "col.bin").write_bytes(col)
+    # Mr. Do's second colour: his white pixels (pen 2 in his colour line) as
+    # an overlay sprite drawn in front of the red one. 64 codes x 4 flips x 32
+    # (codes $00-$26 used), then one byte per code: 1 = it has white pixels.
+    white = bytearray()
+    has = bytearray(64)
+    for code in range(64):
+        for flips in range(4):
+            if code in MR_DO_CODES:
+                art = msx_sprite(sprites[code], flips & 1, flips >> 1)
+                mask = [[art[y][x] == 2 for x in range(16)] for y in range(16)]
+                if any(any(r) for r in mask):
+                    has[code] = 1
+            else:
+                mask = [[False] * 16 for _ in range(16)]
+            white += tms_sprite_bytes(mask)
+    (OUT / "mrdo_white.bin").write_bytes(white + has)
     # Mr. Do's codes are pinned: always first in the SAT, never rotated out.
     pin = bytearray(0x40 if c in MR_DO_CODES else 0 for c in range(128))
     (OUT / "pin.bin").write_bytes(pin)
