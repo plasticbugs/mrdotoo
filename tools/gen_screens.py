@@ -5,16 +5,28 @@ Each tools/data/screens/NAME.txt (made by tools/capture_screen.py) lists the
 (bg attr, bg tile, fg attr, fg tile) cells the screen shows, with counts, its
 camera row and a signature cell. For each screen this composes every cell into
 a Screen 2 tile (same rules as tools/gen_tiles.py), dedupes, and if more than
-SCREEN_MAX distinct tiles remain, maps the rarest onto their nearest kept tile.
-The runtime finds a cell's tile code through a 512-entry open-addressed hash:
+the set's room of distinct tiles remain, maps the rarest onto their nearest
+kept tile. The runtime finds a cell's tile code through a 1024-entry
+open-addressed hash:
 
     h = (fg tile + 4 * (fg attr ^ bg tile ^ bg attr)) & 1023, then h+1, h+2, ...
 
+Screens with a scrolling band (the cutscenes, `band` + `pair` lines) also get:
+  - code 0 = black, and every font character in each colour the screen's text
+    uses (scores and times differ from the capture);
+  - pre-shifted tiles: for every (left bg cell, right bg cell) pair, the 8
+    pixel phases of the pair scrolled left by 0-7 (phase 0 = the left cell);
+  - a 512-entry pair hash (pkey) giving the pair's id, and the pairs' tiles
+    at phases 0, 2, 4, 6 (the band scrolls in 2-pixel steps), all in one bank;
+  - room for the band's tile slots: 2 x BAND_SLOTS codes after the static
+    tiles (up to code 255: the slots need no set data).
+
 Output (build/screens/):
-  sets.bin   screens x SET_BYTES (tile set, same layout as playfield sets)
-  hash.bin   screens x 5KB: keys (1024 x 4 bytes) then codes (1024, $FF = empty)
-  index.bin  screens x 4: signature cell offset (word), signature fg tile, cam
-  preview_NAME.png  a representative frame through the tables
+  banks.bin  whole 16KB banks from SCR_BANK0 on: sets (4 per bank), hashes
+             (3 per bank), a bank per cutscene band (pair hash + tiles). A
+             bank's last 64 bytes stay $FF.
+  banks.inc  SCR_BANKS = number of banks
+  index.bin  16 bytes per screen, see INDEX below
 """
 import sys
 from collections import Counter
@@ -23,19 +35,31 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import gen_tiles as G  # noqa: E402
-from mrdo_gfx import build_palette, decode_chars, load_all  # noqa: E402
+from mrdo_gfx import build_palette, load_all  # noqa: E402
 
 ROOT = HERE.parent
 OUT = ROOT / "build" / "screens"
+SCR_BANK0 = 15                  # first bank (src/main.asm)
+BANK = 0x4000
+BANK_USE = BANK - 64            # MegaCart hotspot
 SCREEN_MAX = 224
 HASH_N = 1024
-HASH_BYTES = HASH_N * 5          # keys (4 each) then codes
-PER_BANK = 3
-SCREENS = ["instruction", "title"]   # first signature match wins: title's logo is on the instruction screen too
+PAIR_N = 512
+BAND_SLOTS = 70                 # tiles per band build (the VERY GOOD scene peaks at 65)
+PAIR_MAX = (BANK_USE - 0x1000) // 64    # pairs per scene (one bank)
+BLANK = 0x29
+FONT_TILES = range(0x30)        # 0-9, A-Z and punctuation
+# Order matters: the first signature match wins, and the title's logo is on the
+# instruction screen too.
+SCREENS = ["instruction", "title", "verygood"]
+# INDEX entry (16 bytes): sig cell (2), sig fg tile, cam, set bank, set address
+# (2), hash bank, hash page, band first screen row, band rows, pair hash bank
+# (0 = no band), slot base (= static tile count), 3 spare
+INDEX = 16
 
 
 def load(name):
-    cam, sig, cells = None, None, Counter()
+    cam, sig, band, cells, pairs = None, None, None, Counter(), Counter()
     for line in (HERE / "data" / "screens" / f"{name}.txt").read_text().splitlines():
         if not line or line[0] == "#":
             continue
@@ -44,14 +68,27 @@ def load(name):
             cam = int(f[1])
         elif f[0] == "sig":
             sig = (int(f[1], 16), int(f[2], 16))
+        elif f[0] == "band":
+            band = (int(f[1]), int(f[2]))
+        elif f[0] == "pair":
+            pairs[tuple(int(x, 16) for x in f[1:5])] += int(f[5])
         else:
             cells[tuple(int(x, 16) for x in f[:4])] += int(f[4])
-    return cam, sig, cells
+    return cam, sig, band, cells, pairs
 
 
 def hkey(k):
     a, b, c, e = k
     return (e + ((c ^ b ^ a) << 2)) & (HASH_N - 1)
+
+
+def pkey(k):
+    """Pair hash: ((left tile ^ rlc3(right tile)) * 2 + bit 2 of (left attr ^
+    right attr)). 1.1 probes on average for the VERY GOOD scene (a sum of the
+    tiles clustered: 6.8, up to 60)."""
+    la, lt, ra, rt = k
+    r3 = ((rt << 3) | (rt >> 5)) & 0xFF
+    return (((lt ^ r3) << 1) | ((la ^ ra) >> 2 & 1)) & (PAIR_N - 1)
 
 
 def distance(t1, t2):
@@ -64,12 +101,33 @@ def distance(t1, t2):
     return d
 
 
+class Banks:
+    """Packs blobs into 16KB banks, never into a bank's last 64 bytes."""
+    def __init__(self):
+        self.banks = []
+
+    def put(self, blob, per_bank):
+        """-> (bank number, address); up to `per_bank` blobs of a kind share a bank."""
+        if not self.banks or self.banks[-1][1] != per_bank or self.banks[-1][2] >= per_bank:
+            self.banks.append([bytearray(), per_bank, 0])
+        b = self.banks[-1]
+        addr = 0xC000 + len(b[0])
+        b[0] += blob
+        b[2] += 1
+        assert len(b[0]) <= BANK_USE
+        return SCR_BANK0 + len(self.banks) - 1, addr
+
+    def data(self):
+        return b"".join(bytes(b) + b"\xff" * (BANK - len(b)) for b, _, _ in self.banks)
+
+
 def main():
     gfx1, gfx2, _, proms = load_all()
     fgt, bgt = G.decode_chars(gfx1), G.decode_chars(gfx2)
     pal = build_palette(proms)
 
-    def compose(k):
+    def pixels(k):
+        """(bg attr, bg tile, fg attr, fg tile) -> 8x8 TMS indices, native [y][x]."""
         out = [[1] * 8 for _ in range(8)]
         for tiles, (attr, tile) in ((bgt, (k[0], k[1])), (fgt, (k[2], k[3]))):
             art = tiles[tile + ((attr & 0x80) << 1)]
@@ -79,17 +137,43 @@ def main():
                     pen = art[y][x]
                     if pen or attr & 0x40:
                         out[y][x] = G.tms_index(pal[line + pen])
-        return G.to_screen2(G.rot(out))
+        return out
+
+    def compose(k):
+        return G.to_screen2(G.rot(pixels(k)))
+
+    def pair_tiles(k):
+        """The 8 phases of a bg pair: the bg layer scrolls along the native
+        first index (the player-view x axis), so phase s shows rows s..s+7 of
+        left + right. 16 bytes per phase: pattern, then colour."""
+        la, lt, ra, rt = k
+        left = pixels((la, lt, 0, BLANK))
+        right = pixels((ra, rt, 0, BLANK)) if (ra, rt) != (0xFF, 0xFF) else pixels((0, BLANK, 0, BLANK))
+        out = bytearray()
+        for s in range(8):
+            cell = [left[i + s] if i + s < 8 else right[i + s - 8] for i in range(8)]
+            p, c = G.to_screen2(G.rot(cell))
+            out += p + c
+        return out
 
     OUT.mkdir(parents=True, exist_ok=True)
-    sets, hashes, index = bytearray(), bytearray(), bytearray()
+    banks = Banks()
+    entries, sets, hashes = [], [], []
     for name in SCREENS:
-        cam, sig, cells = load(name)
+        cam, sig, band, cells, pairs = load(name)
+        room = min(SCREEN_MAX, 256 - 2 * BAND_SLOTS) if band else SCREEN_MAX   # slots may use 224-255
+        if band:                    # every font character in each text colour
+            for attr in {k[2] for k in list(cells) if k[3] in FONT_TILES}:
+                for t in FONT_TILES:
+                    cells[(0, BLANK, attr, t)] += 0
         tile_of = {k: compose(k) for k in cells}
         weight = Counter()
         for k, n in cells.items():
-            weight[tile_of[k]] += n
-        kept = [t for t, _ in weight.most_common(SCREEN_MAX)]
+            weight[tile_of[k]] += n + 1
+        kept = [t for t, _ in weight.most_common(room)]
+        if band:                    # code 0 = black: the band's empty cells
+            black = compose((0, BLANK, 0, BLANK))
+            kept = [black] + [t for t in kept if t != black][:room - 1]
         code = {t: i for i, t in enumerate(kept)}
         merged = 0
         for t in weight:
@@ -108,14 +192,46 @@ def main():
         blob += b"".join(p for p, _ in kept) + bytes(8 * (G.MAX - len(kept)))
         blob += b"".join(c for _, c in kept) + bytes(8 * (G.MAX - len(kept)))
         assert len(blob) == G.SET_BYTES
-        sets += blob
-        hashes += keys + codes
-        index += bytes([sig[0] & 0xFF, sig[0] >> 8, sig[1], cam])
+        sets.append(blob)
+        hashes.append(keys + codes)
+        entries.append((name, cam, sig, band, len(kept), pairs))
         print(f"{name}: {len(cells)} cells -> {len(weight)} tiles, {len(kept)} kept, "
-              f"{merged} merged into their nearest; cam {cam}, signature ${sig[0]:03x}=${sig[1]:02x}")
-    (OUT / "sets.bin").write_bytes(sets)
-    (OUT / "hash.bin").write_bytes(hashes)
+              f"{merged} merged into their nearest; cam {cam}, signature ${sig[0]:03x}=${sig[1]:02x}"
+              + (f"; band rows {band[0]}-{band[1]}, {len(pairs)} pairs" if band else ""))
+    set_at = [banks.put(b, 4) for b in sets]
+    hash_at = [banks.put(h, 3) for h in hashes]
+    index = bytearray()
+    for i, (name, cam, sig, band, nkept, pairs) in enumerate(entries):
+        pbank = 0
+        if band:
+            # One bank: keys (512 x 4) at $C000, ids at $C800, then 64 bytes
+            # per pair (phases 0, 2, 4, 6: the band scrolls in 2-pixel steps)
+            # at $D000 + id * 64.
+            order = sorted(pairs, key=lambda k: -pairs[k])
+            assert len(order) <= PAIR_MAX, f"{name}: {len(order)} pairs > {PAIR_MAX}"
+            ph = bytearray(b"\xff" * (PAIR_N * 4)) + bytearray(PAIR_N) + bytearray(0x1000 - PAIR_N * 5)
+            for pid, p in enumerate(order):
+                h = pkey(p)
+                while ph[h * 4:h * 4 + 4] != b"\xff\xff\xff\xff":
+                    h = (h + 1) & (PAIR_N - 1)
+                ph[h * 4:h * 4 + 4] = bytes(p)
+                ph[PAIR_N * 4 + h] = pid
+            for p in order:
+                t = pair_tiles(p)
+                ph += b"".join(t[s * 16:s * 16 + 16] for s in (0, 2, 4, 6))
+            pbank, _ = banks.put(ph, 1)
+        sb, sa = set_at[i]
+        hb, ha = hash_at[i]
+        row0 = band[0] - cam if band else 0
+        nrows = band[1] - band[0] + 1 if band else 0
+        assert not band or 0 <= row0 and row0 + nrows <= 24
+        index += bytes([sig[0] & 0xFF, sig[0] >> 8, sig[1], cam, sb, sa & 0xFF, sa >> 8,
+                        hb, ha >> 8, row0, nrows, pbank, nkept, 0, 0, 0])
+    data = banks.data()
+    (OUT / "banks.bin").write_bytes(data)
+    (OUT / "banks.inc").write_text(f"SCR_BANKS equ {len(data) // BANK}\n")
     (OUT / "index.bin").write_bytes(index)
+    print(f"screens: {len(SCREENS)} in {len(data) // BANK} banks from {SCR_BANK0}")
 
 
 if __name__ == "__main__":

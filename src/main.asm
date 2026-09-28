@@ -69,7 +69,29 @@ rd_wait:        ds 1            ; vblanks the pending redraw has waited
 mode:           ds 1            ; MODE_NONE / MODE_PLAYFIELD / MODE_SCREEN
 cw_valid:       ds 1            ; the playfield corner shows a known colourway
 scr:            ds 1            ; screen index in MODE_SCREEN
-scr_hpage:      ds 1            ; its hash table page in SCR_HASH_BANK
+scr_hbank:      ds 1            ; screen mode: hash bank ... (6 bytes, order as in scr_index)
+scr_hpage:      ds 1            ;   its hash table page
+scn_row0:       ds 1            ;   scrolling band: first screen row
+scn_rows:       ds 1            ;   its rows (0 = none)
+scn_pbank:      ds 1            ;   pair hash bank (0 = no band)
+scn_base:       ds 1            ;   first band tile slot
+scn_ready:      ds 1            ; band built, names due at the next vblank
+scn_bank:       ds 1            ; slot bank being built (0/1)
+scn_n:          ds 1            ; slots taken in it
+scn_scroll:     ds 1            ; scroll step being built
+scn_rowbuf:     ds 2            ; the band row being built, in SCN_BUF
+scn_r0:         ds 1            ; native row of its cell at sx = 0
+scn_col:        ds 1            ; its native column
+scn_mask:       ds 6 * 4        ; per band row: native rows with art (bit = row)
+scn_key:        ds 4            ; left attr, left tile, right attr, right tile
+scn_dirty:      ds 1            ; a band cell changed: rebuild
+scn_fill:       ds 1            ; a new scene: half rows of caches filled (scene.asm)
+scn_ph:         ds 1            ; phase of the build (scroll & 7)
+scn_k:          ds 1            ; band row being built
+scn_fast:       ds 1            ; 8-byte groups the flush may still write back to back
+scn_flush2:     ds 1            ; a heavy build's colours and names are due
+scn_brow:       ds 1            ; next band row of the build under way (0 = none)
+scn_lastn:      ds 1            ; tiles of the previous build
 up_bank:        ds 1
 up_set:         ds 2
 up_len:         ds 1            ; tile count (8-byte groups per table)
@@ -151,15 +173,13 @@ pf_drops:       ds 2            ; vblanks skipped so the pathfinder could run
         incbin "build/sprites/pat.bin", $2000, $2000
         ds $10000-$, $FF
 
-        org $C000                       ; bank 15: non-gameplay screen tile sets
-        incbin "build/screens/sets.bin"
-        ds $10000-$, $FF
+        include "build/screens/banks.inc"
+        dup SCR_BANKS, n                ; banks 15..: non-gameplay screens (sets,
+        org $C000                       ; hashes, cutscene pair tiles and hashes)
+        incbin "build/screens/banks.bin", n*$4000, $4000
+        edup
 
-        org $C000                       ; bank 16: their cell -> tile hashes
-        incbin "build/screens/hash.bin"
-        ds $10000-$, $FF
-
-        dup MC_FIXED-17, n              ; banks 17..: free
+        dup MC_FIXED-15-SCR_BANKS, n    ; free
         org $C000
         ds $10000-$, $FF
         edup
@@ -816,7 +836,7 @@ print_vram:
 s_nosgm1: db "SUPER GAME MODULE REQUIRED", 0
 s_nosgm2: db "PLEASE CONNECT", 0
 
-scr_index:                              ; per screen: signature cell, fg tile, camera
+scr_index:                              ; per screen: 16 bytes (tools/gen_screens.py)
         incbin "build/screens/index.bin"
 scr_index_end:
 
@@ -826,6 +846,7 @@ font_len equ $-font
 
         include "render.asm"
         include "sprites.asm"
+        include "scene.asm"
 
         assert $ <= VSTUB_BASE
         ds VSTUB_BASE-$, $FF

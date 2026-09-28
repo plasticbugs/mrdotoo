@@ -1,7 +1,7 @@
 # Mr. Do! arcade port for ColecoVision + SGM
 ROM      := build/mrdo.rom
 SRC      := $(wildcard src/*.asm src/*.inc)
-DATA     := build/font.bin build/arc_lo.bin build/arc_hi.bin build/tiles/sets.bin build/sprites/pat.bin build/sprites/pin.bin build/screens/sets.bin
+DATA     := build/font.bin build/arc_lo.bin build/arc_hi.bin build/tiles/sets.bin build/sprites/pat.bin build/sprites/pin.bin build/screens/banks.bin
 DIS      ?= $(HOME)/work/do_disassemble
 OPENMSX  ?= /Applications/openMSX.app/Contents/MacOS/openmsx
 
@@ -17,7 +17,7 @@ build/sprites/pat.bin build/sprites/pin.bin: tools/gen_sprites.py tools/gen_spri
 	python3 tools/gen_sprites.py
 	python3 tools/gen_sprites_hack.py
 
-build/screens/sets.bin: tools/gen_screens.py tools/gen_tiles.py $(wildcard tools/data/screens/*.txt)
+build/screens/banks.bin: tools/gen_screens.py tools/gen_tiles.py $(wildcard tools/data/screens/*.txt)
 	python3 tools/gen_screens.py
 
 build/codemap.json: tools/codemap.py tools/z80dis.py tools/data/ghidra_functions.txt

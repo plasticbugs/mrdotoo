@@ -1,14 +1,24 @@
 #!/usr/bin/env python3
 """Dev-time capture of a non-gameplay screen's tile cells (needs MAME output).
 
-usage: capture_screen.py NAME CAM RECORDING.ram:FIRST-LAST [...] [--not RECORDING.ram:FIRST-LAST ...]
-Reads a tools/diff/mame_record.lua recording (8KB per vblank handler: work RAM
-then video RAM), collects every (bg attr, bg tile, fg attr, fg tile) cell in
-the camera window (player-view rows CAM..CAM+23, playfield columns) over
-handlers FIRST..LAST, picks a signature cell (an fg tile constant over the
-whole run, unusual elsewhere, and never seen at that cell in the --not
-frames, e.g. other screens that share the logo), and writes tools/data/screens/NAME.txt, which
+usage: capture_screen.py NAME CAM SPEC [...] [--band R0-R1] [--not SPEC ...]
+  SPEC  RECORDING.ram:FIRST-LAST   tools/diff/mame_record.lua recording (8KB per
+                                   vblank handler: work RAM, then video RAM)
+        scene:PREFIX:FIRST-LAST    tools/capture/scene_record.lua recording
+                                   (PREFIX.bin per video frame + PREFIX.scroll)
+Collects every (bg attr, bg tile, fg attr, fg tile) cell in the camera window
+(player-view rows CAM..CAM+23, playfield columns) over the given frames, picks
+a signature cell (an fg tile constant over the whole run, unusual elsewhere,
+and never seen at that cell in the --not frames, e.g. other screens that
+share the logo), and writes tools/data/screens/NAME.txt, which
 tools/gen_screens.py turns into a tile set. Commit the .txt.
+
+--band R0-R1: player rows R0..R1 hold background art that the arcade scrolls
+(the cutscenes' characters; bg scroll register $F800, pixels along the
+player-view x axis). Those rows are left out of the static cells; instead
+every (left bg cell, right bg cell) pair the scroll brings into a cell is
+listed, for pre-shifted tiles. A pair seen only at phase 0 has no right cell
+(written ff ff). The band must never have foreground art over it.
 """
 import sys
 from collections import Counter
@@ -16,34 +26,79 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 REC = 8192
+SCENE_REC = 4096 + 256 + 4096
+BLANK_BG = 0x29
+
+
+def load(spec):
+    """-> list of (video RAM 4KB, bg scroll)"""
+    if spec.startswith("scene:"):
+        _, prefix, rng = spec.split(":")
+        first, last = (int(x) for x in rng.split("-"))
+        d = Path(prefix + ".bin").read_bytes()
+        n = len(d) // SCENE_REC
+        # scroll writes tagged frame f are in effect from record f-1 on (the
+        # recorder dumps record i at the end of frame i+2)
+        writes = {}
+        for line in Path(prefix + ".scroll").read_text().splitlines():
+            p = line.split()
+            if p[0] in ("SNAP", "POKE"):
+                continue
+            if int(p[1], 16) >= 0xF800:
+                writes.setdefault(int(p[0]), []).append(int(p[2], 16))
+        out, y = [], 0
+        for i in range(n):
+            for v in writes.get(i + 1, []):
+                y = v
+            f = i + 2
+            if first <= f <= last:
+                out.append((d[i * SCENE_REC:i * SCENE_REC + 4096], y))
+        return out
+    path, rng = spec.rsplit(":", 1)
+    first, last = (int(x) for x in rng.split("-"))
+    d = Path(path).read_bytes()
+    return [(d[h * REC + 4096:(h + 1) * REC], 0) for h in range(first, min(last + 1, len(d) // REC))]
 
 
 def main():
     name, cam = sys.argv[1], int(sys.argv[2])
-    combos = Counter()
-    const = None
-    frames = []
     args = sys.argv[3:]
     nots = args[args.index("--not") + 1:] if "--not" in args else []
-    specs = args[:args.index("--not")] if "--not" in args else args
-
-    def load(spec):
-        path, rng = spec.rsplit(":", 1)
-        first, last = (int(x) for x in rng.split("-"))
-        d = Path(path).read_bytes()
-        return [d[h * REC + 4096:(h + 1) * REC] for h in range(first, min(last + 1, len(d) // REC))]
+    args = args[:args.index("--not")] if "--not" in args else args
+    band = None
+    if "--band" in args:
+        i = args.index("--band")
+        band = tuple(int(x) for x in args[i + 1].split("-"))
+        args = args[:i] + args[i + 2:]
+    specs = args
+    frames = []
     for spec in specs:
         frames += load(spec)
     seen_elsewhere = set()
     for spec in nots:
-        for v in load(spec):
+        for v, _ in load(spec):
             seen_elsewhere.update((o, v[0xC00 + o]) for o in range(0x400))
-    for v in frames:
+
+    combos, pairs = Counter(), Counter()
+    const = None
+    for v, scroll in frames:
         cells = {}
-        for sy in range(24):
-            c = 31 - (sy + cam)
+        for row in range(cam, cam + 24):
+            c = 31 - row
+            in_band = band and band[0] <= row <= band[1]
             for sx in range(24):
                 o = (sx + 4) * 32 + c
+                if in_band:
+                    assert v[0xC00 + o] == BLANK_BG, f"foreground art over the band at row {row}"
+                    rp = sx * 8 + 32 + scroll
+                    r0, s = (rp >> 3) & 31, rp & 7
+                    lo, ro = r0 * 32 + c, ((r0 + 1) & 31) * 32 + c
+                    left = (v[lo], v[0x400 + lo])
+                    right = (v[ro], v[0x400 + ro]) if s else (0xFF, 0xFF)
+                    if left[1] == BLANK_BG and (not s or right[1] == BLANK_BG):
+                        continue
+                    pairs[left + right] += 1
+                    continue
                 k = (v[o], v[0x400 + o], v[0x800 + o], v[0xC00 + o])
                 combos[k] += 1
                 cells[o] = v[0xC00 + o]
@@ -58,9 +113,13 @@ def main():
     lines = [f"# {name}: captured from {' '.join(Path(a).name for a in specs)}"
              + (f" (signature unseen in {' '.join(Path(a).name for a in nots)})" if nots else ""),
              f"cam {cam}", f"sig {sig[0]:03x} {sig[1]:02x}"]
+    if band:
+        lines.append(f"band {band[0]} {band[1]}")
+        lines += [f"pair {a:02x} {b:02x} {c:02x} {e:02x} {n}" for (a, b, c, e), n in pairs.most_common()]
     lines += [f"{a:02x} {b:02x} {c:02x} {e:02x} {n}" for (a, b, c, e), n in combos.most_common()]
     out.write_text("\n".join(lines) + "\n")
-    print(f"{name}: {len(combos)} cells, signature cell ${sig[0]:03x} = fg tile ${sig[1]:02x} -> {out}")
+    print(f"{name}: {len(combos)} cells, {len(pairs)} band pairs, signature cell ${sig[0]:03x} = "
+          f"fg tile ${sig[1]:02x} -> {out}")
 
 
 if __name__ == "__main__":

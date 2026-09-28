@@ -23,9 +23,9 @@ SETS_PER_BANK   equ 4
 SET_MAX         equ 224
 SET_BYTES       equ 2 + SET_MAX*16
 TBL_BANK        equ 12          ; per colourway: TBLA page, TBLB page; then dirt pairs
-SCR_SET_BANK    equ 15          ; non-gameplay screen tile sets, 4 per bank
-SCR_HASH_BANK   equ 16          ; their cell -> code hashes, 5KB each (3 per bank)
-N_SCREENS       equ (scr_index_end - scr_index) / 4
+SCR_BANK0       equ 15          ; non-gameplay screens: sets, hashes, scene data (tools/gen_screens.py)
+SCR_INDEX       equ 16          ; bytes per scr_index entry
+N_SCREENS       equ (scr_index_end - scr_index) / SCR_INDEX
 MODE_NONE       equ 0
 MODE_PLAYFIELD  equ 1
 MODE_SCREEN     equ 2
@@ -201,6 +201,7 @@ render:
         jp select_bank
 
 render_body:
+        call scene_vblank       ; a cutscene band's new tiles and names
         ld a, (mode)
         or a
         call nz, sprites_update ; first, inside vblank
@@ -211,7 +212,8 @@ render_body:
         cp MODE_SCREEN
         ld a, TBL_BANK
         jr nz, .bank
-        ld a, SCR_HASH_BANK
+        call scene_update       ; (a cutscene's scrolling band, if any)
+        ld a, (scr_hbank)
 .bank:  call select_bank
         call camera_update
         ld a, (redraw_all)
@@ -271,8 +273,17 @@ render_body:
 .done:  ld a, ARC_HI_BANK
         jp select_bank
 
-; Show the name table the last full redraw went into.
+; Show the name table the last full redraw went into (a scene's band names
+; go into it at the next vblank).
 flip_pnt:
+        ld a, (scn_pbank)
+        or a
+        jr z, .noband
+        ld a, (mode)
+        cp MODE_SCREEN
+        jr nz, .noband
+        ld (scn_ready), a       ; (nonzero)
+.noband:
         ld a, (pnt_back)
         ld b, a
         ld a, (pnt_front)
@@ -391,9 +402,9 @@ check_screens:
         ld a, (hl)
         pop hl
         cp (hl)
-        inc hl
         jr z, .hit
-        inc hl
+        ld de, SCR_INDEX - 2
+        add hl, de
         inc c
         jr .next
 .hit:   ld a, (mode)
@@ -407,33 +418,31 @@ check_screens:
         ld (scr_last+1), a
         ld a, c
         ld (scr), a
+        inc hl                  ; entry +3: camera (fixed per screen)
         ld a, (hl)
-        ld (cam), a             ; each screen has a fixed camera
+        ld (cam), a
+        inc hl
+        ld a, (hl)              ; set bank
+        inc hl
+        ld e, (hl)
+        inc hl
+        ld d, (hl)              ; set address
+        inc hl
+        push af
+        push de
+        ld de, scr_hbank        ; hash bank, hash page, band row, band rows,
+        ld bc, 6                ; pair hash bank, slot base
+        ldir
+        xor a
+        ld (scn_ready), a       ; a new band starts from scratch
+        ld (scn_brow), a
+        ld (scn_flush2), a
+        ld (scn_lastn), a
+        ld (scn_fill), a        ; fill its caches first
         ld a, MODE_SCREEN
         ld (mode), a
-        ld a, c                 ; hash base page: $C0 + (scr % 3) * $14 (5KB each)
-        ld b, a
-        ld d, $C0
-.h3:    sub 3
-        jr c, .hd
-        jr .h3
-.hd:    add a, 3
-        ld e, a                 ; * $14 = * 20
-        add a, a
-        add a, a
-        add a, e                ; * 5
-        add a, a
-        add a, a                ; * 20
-        add a, d
-        ld (scr_hpage), a
-        ld a, b                 ; set: bank SCR_SET_BANK + scr/4, slot scr%4
-        srl a
-        srl a
-        add a, SCR_SET_BANK
-        ld b, a
-        ld a, c
-        call set_address
-        ld a, b
+        pop hl
+        pop af
         call upload_start
         ld a, ARC_HI_BANK
         jp select_bank
@@ -604,7 +613,18 @@ redraw_rows:
         jr z, .scr
         call draw_run
         jr .rowdone
-.scr:   call draw_run_scr
+.scr:   ld a, (rd_row)
+        call in_band
+        jr c, .band
+        call draw_run_scr
+        jr .rowdone
+.band:  ld b, 24                ; the band is scene_update's: black here
+        xor a
+.bl:    out (VDP_DATA), a
+        nop
+        nop
+        nop
+        djnz .bl
 .rowdone:
         ld a, (rd_row)
         inc a
@@ -613,6 +633,34 @@ redraw_rows:
         djnz .row
         ret
 .end:   pop bc
+        ret
+
+; A = screen row. Carry if it is in the current screen's scrolling band.
+; Preserves everything else.
+in_band:
+        push bc
+        ld c, a
+        ld a, (scn_pbank)
+        or a
+        jr z, .no
+        ld a, (scn_row0)
+        ld b, a
+        ld a, c
+        sub b
+        jr c, .no
+        ld b, a
+        ld a, (scn_rows)
+        dec a
+        cp b                    ; (row - row0) <= rows - 1 ?
+        ccf
+        jr nc, .no              ; (carry now = row - row0 > rows - 1)
+        ld a, c
+        scf
+        pop bc
+        ret
+.no:    ld a, c
+        or a
+        pop bc
         ret
 
 ; HL = bg-tile address of the first cell; draws 24 cells down the native
@@ -841,6 +889,22 @@ drain_queue:
 
 ; DE = cell (native row * 32 + column).
 draw_cell:
+        ld a, (mode)            ; a cutscene band's cell (any native row: the
+        cp MODE_SCREEN          ; scroll brings them all in) is scene_mark's
+        jr nz, .noband
+        ld a, (scn_pbank)
+        or a
+        jr z, .noband
+        ld a, (cam)
+        ld b, a
+        ld a, e
+        and $1F
+        cpl
+        and $1F                 ; 31 - column
+        sub b
+        call in_band
+        jp c, scene_mark
+.noband:
         ld a, e                 ; native row = cell >> 5
         and $E0
         or d

@@ -32,3 +32,4 @@ recordings, one folder per milestone. Files here are committed; `build/` is not.
 - `06-chomper-red-desserts/`: chomper mode (after the dessert) paints the playfield red instead of black; dessert plates drawn as background tiles. Left arcade (MAME), right CV (validation build), same handlers.
 - `07-hack-desserts/`: dessert as the romhack's full-colour tiles (arcade left, CV right); chomper session stuck in the nest before the pathfinder starvation guard, and moving after it.
 - `08-no-black-flash/`: green-to-red chomper transition in one step (arcade top, CV bottom; one flat red frame during the tile upload); the instruction screen as its own captured screen set; a forced chomper session with the chompers out of the nest.
+- `09-very-good-cutscene/`: the VERY GOOD cutscene with the arcade's scrolling characters (pre-shifted pair tiles streamed each build); a simulation of the ROM tables against the arcade render; the sequence on the CV.
