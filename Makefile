@@ -10,11 +10,12 @@ all: $(ROM)
 build/font.bin: tools/gen_font.py
 	python3 tools/gen_font.py > /dev/null
 
-build/tiles/sets.bin: tools/gen_tiles.py
+build/tiles/sets.bin: tools/gen_tiles.py build/sprites/pat.bin
 	python3 tools/gen_tiles.py
 
-build/sprites/pat.bin build/sprites/pin.bin: tools/gen_sprites.py
+build/sprites/pat.bin build/sprites/pin.bin: tools/gen_sprites.py tools/gen_sprites_hack.py
 	python3 tools/gen_sprites.py
+	python3 tools/gen_sprites_hack.py
 
 build/codemap.json: tools/codemap.py tools/z80dis.py tools/data/ghidra_functions.txt
 	python3 tools/codemap.py

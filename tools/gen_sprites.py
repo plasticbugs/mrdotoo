@@ -32,7 +32,7 @@ from gen_tiles import TMS, tms_index  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "build" / "sprites"
 BLACK = 1
-MR_DO_CODES = set(range(0, 38))   # walk / push / dig / death frames (sheet rows 0-2)
+MR_DO_CODES = set(range(0x00, 0x27))   # walk, dig, push, throw, caught, death ($00-$26)
 
 
 def usual_lines():

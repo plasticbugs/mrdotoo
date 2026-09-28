@@ -107,7 +107,36 @@ def main():
     pal = build_palette(proms)
     cways = [(ROM[0x06E6 + i * 2], ROM[0x06E7 + i * 2]) for i in range(31)]
 
+    # The CV romhack's cherry art (tools/gen_sprites_hack.py): 4 tiles in the
+    # order $78-$7B, 8 pattern + 8 colour bytes each, already in the player's
+    # view; background colour 0 = let the dirt show through.
+    hack = ROOT / "build" / "tiles" / "cherry_hack.bin"
+    cherry = {}
+    if hack.exists():
+        hb = hack.read_bytes()
+        for i, t in enumerate(sorted(CHERRY_TILES)):
+            cherry[t] = (hb[i * 16:i * 16 + 8], hb[i * 16 + 8:i * 16 + 16])
+
+    def screen_cell(bg_pair):
+        """The background alone, player view, as TMS indices."""
+        out = [[1] * 8 for _ in range(8)]
+        attr, tile = bg_pair
+        art = bgt[tile + ((attr & 0x80) << 1)]
+        line = (attr & 0x3F) * 4
+        for y in range(8):
+            for x in range(8):
+                pen = art[y][x]
+                if pen or attr & 0x40:
+                    out[y][x] = tms_index(pal[line + pen])
+        return rot(out)
+
     def compose(bg_pair, fg_tile, fg_attr):
+        if fg_tile in cherry:
+            pat, col = cherry[fg_tile]
+            under = screen_cell(bg_pair)
+            cell = [[(col[y] >> 4) if (pat[y] >> (7 - x)) & 1 else
+                     ((col[y] & 15) or under[y][x]) for x in range(8)] for y in range(8)]
+            return to_screen2(cell)
         out = [[1] * 8 for _ in range(8)]
         for tiles, (attr, tile) in ((bgt, bg_pair), (fgt, (fg_attr, fg_tile))):
             art = tiles[tile + ((attr & 0x80) << 1)]

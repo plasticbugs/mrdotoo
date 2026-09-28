@@ -16,14 +16,14 @@ debug set_bp [symaddr sprites_update] {$::on} { set ::ts [now] }
 set ::loads 0; set ::slots 0; set ::resolves 0; set ::hits 0
 set ::te 0; set ::tc 0; set ::p1 {}; set ::p2 {}; set ::p3 {}
 debug set_bp [symaddr sprites_emit] {$::on && $::ts} { set ::te [now]; lappend ::p1 [expr {($::te - $::ts)/6}] }
-debug set_bp [symaddr crowd_emit] {$::on && $::te} { set ::tc [now]; lappend ::p2 [expr {($::tc - $::te)/6}] }
+
 debug set_bp [symaddr sprite_resolve] {$::on} { incr ::resolves }
 debug set_bp [symaddr sprites_update.hit] {$::on} { incr ::hits }
 debug set_bp [symaddr sprite_load] {$::on} { incr ::loads }
 debug set_bp [symaddr sprite_slot] {$::on} { incr ::slots }
 debug set_bp [symaddr check_colourway] {$::on} {
     if {$::ts} { lappend ::spr_samples [expr {([now] - $::ts) / 6}]; set ::ts 0 }
-    if {$::tc} { lappend ::p3 [expr {([now] - $::tc) / 6}]; set ::tc 0; set ::te 0 }
+    if {$::te} { lappend ::p2 [expr {([now] - $::te) / 6}]; set ::te 0 }
 }
 debug set_bp [symaddr read_inputs] {$::on} { lappend ::nmi_samples [expr {([now] - $::t0) / 6}] }
 set throttle off
@@ -39,7 +39,7 @@ after time 15  { poke [symaddr inp_p1] 0xef }
 after time 15.2 { poke [symaddr inp_p1] 0xff }
 after time 20 {
     puts stderr "sprites drawn=$::hits resolves=$::resolves slot lookups=$::slots pattern loads=$::loads over [llength $::nmi_samples] frames"
-    foreach {name l} [list "NMI work (render+sprites)" $::nmi_samples "  of which sprites" $::spr_samples "    pass 1 resolve" $::p1 "    emit scans" $::p2 "    crowd sort+emit (+render tail)" $::p3] {
+    foreach {name l} [list "NMI work (render+sprites)" $::nmi_samples "  of which sprites" $::spr_samples "    resolve + bands" $::p1 "    emit" $::p2] {
         set s [lsort -integer $l]; set n [llength $s]
         if {!$n} continue
         puts stderr [format "%-28s n=%d median=%d p95=%d max=%d T-states" $name $n [lindex $s [expr {$n/2}]] [lindex $s [expr {int($n*0.95)}]] [lindex $s end]]
