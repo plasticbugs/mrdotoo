@@ -53,6 +53,8 @@ scene_update:
         ld a, (scn_pbank)
         or a
         ret z                   ; this screen has no band
+        call vgl_check          ; VERY GOOD landed: the romhack's picture
+        ret nz                  ; (vgland.asm)
         ld a, (up_pending)
         or a
         ret nz                  ; its tile set is not loaded yet
@@ -130,6 +132,9 @@ scene_vblank:
         ld a, (up_pending)
         or a
         ret nz
+        ld a, (vgl_on)
+        or a
+        jp nz, vgl_tick
         ld a, (scn_flush2)
         or a
         jp nz, scene_flush.second

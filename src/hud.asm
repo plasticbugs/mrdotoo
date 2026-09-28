@@ -169,6 +169,7 @@ hud_redraw:
         jr z, .done
         push hl
         call hud_cell_m
+        call late_ack
         pop hl
         jr .c
 .done:  pop af

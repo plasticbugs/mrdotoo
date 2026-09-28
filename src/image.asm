@@ -126,6 +126,7 @@ image_tick:
 ; Called where a new screen or playfield takes over: if an image was up,
 ; clear both name tables and the sprites.
 leave_image:
+        call vgl_leave
         ld a, (mode)
         cp MODE_IMAGE
         ret nz

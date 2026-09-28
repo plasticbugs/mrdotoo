@@ -65,6 +65,49 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "extra.bin").write_bytes(blob)
     print(f"extra.bin: {len(pt)} B patterns, {len(ct)} B colours, 22 sprites, flag frames")
+    vgland()
+
+
+# VERY GOOD, once the characters have landed: the romhack's picture of the
+# same three (Mr. Do pushing the apple, the dinosaur), 14 x 5 tiles plus 10
+# sprites (some black, covering tile pixels), two frames swapped every 8
+# vblanks (cvb_INTERMISSION_FRM1/2). src/vgland.asm draws it over our band
+# (screen rows 16-20) at column VG_COL, where our landed characters sit (the
+# romhack put it at row 17, column 10).
+VG_COL, VG_ROW = 5, 16
+RH_COL, RH_ROW = 10, 17
+
+
+def vgland():
+    """build/images/vgland.bin (bank 29 at $E000, src/vgland.asm):
+      +$000 patterns of tiles $01-$3B (59 x 8)   +$200 their colours
+      +$400 sprite patterns, 80 x 8 (20 16x16 sprites)
+      +$700 frame 1 SAT (10 x 4, $D0)            +$730 frame 2 SAT
+      +$760 frame 1 names, 14 x 5 (romhack tile numbers, 0 = black)
+      +$7B0 frame 2 names, rows 3-4 of the block, 14 x 2"""
+    pt = H.pletter(H.db_block(H.CORE, "intermission_char"))
+    ct = H.pletter(H.db_block(H.CORE, "intermission_color"))
+    spt = H.pletter(H.db_block(H.CORE, "intermission_sprites"))
+    fr1 = db_exprs(H.CORE, "cvb_FR1")
+    fr2 = db_exprs(H.CORE, "cvb_FR2")
+    sp = [db_exprs(H.CORE, "cvb_SP1"), db_exprs(H.CORE, "cvb_SP2")]
+    assert len(fr1) == 70 and len(fr2) == 28 and all(len(x) == 40 for x in sp)
+    assert max(fr1 + fr2) == 0x3B and len(spt) >= 640
+    dy, dx = (VG_ROW - RH_ROW) * 8, (VG_COL - RH_COL) * 8
+    blob = bytearray(0x800)
+    blob[0x000:0x000 + 59 * 8] = pt[8:60 * 8]
+    blob[0x200:0x200 + 59 * 8] = ct[8:60 * 8]
+    blob[0x400:0x400 + 640] = spt[:640]
+    for k, s in enumerate(sp):
+        sat = bytearray()
+        for i in range(10):
+            y, x, n, c = s[i * 4:i * 4 + 4]
+            sat += bytes([(y + dy) & 0xFF, (x + dx) & 0xFF, n, c])
+        blob[0x700 + k * 0x30:0x700 + k * 0x30 + 41] = sat + b"\xd0"
+    blob[0x760:0x760 + 70] = bytes(fr1)
+    blob[0x7B0:0x7B0 + 28] = bytes(fr2)
+    (OUT / "vgland.bin").write_bytes(blob)
+    print("vgland.bin: VERY GOOD landed picture, 59 tiles, 20 sprite patterns, 2 frames")
 
 
 if __name__ == "__main__":

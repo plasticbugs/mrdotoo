@@ -180,6 +180,9 @@ vh_hl_n:                        ; rst $30 + inline byte: ld (hl),n
 ; -----------------------------------------------------------------------------
 render_init:
         xor a
+        ld (vgl_on), a
+        ld (vgl_armed), a
+        ld (nmi_late), a
         ld (q_head), a
         ld (q_tail), a
         ld (redraw_all), a
@@ -214,11 +217,17 @@ render:
 
 render_body:
         call scene_vblank       ; a cutscene band's new tiles and names
+        call late_ack           ; (safe points: see nmi)
         ld a, (mode)
         cp MODE_IMAGE
         jp z, .image
         or a
-        call nz, sprites_update ; first, inside vblank
+        jr z, .nospr
+        ld a, (vgl_on)          ; (the VERY GOOD picture has its own sprites)
+        or a
+        call z, sprites_update  ; first, inside vblank
+.nospr:
+        call late_ack
         call check_colourway
         ld a, (mode)
         or a
@@ -717,6 +726,7 @@ redraw_rows:
         nop
         djnz .bl
 .rowdone:
+        call late_ack
         ld a, (rd_row)
         inc a
         ld (rd_row), a
@@ -1011,6 +1021,9 @@ drain_queue:
         ld (q_tail), a
         push bc
         call draw_cell
+        ld a, (nmi_late)        ; (a safe point, see nmi)
+        or a
+        call nz, late_ack
         pop bc
         djnz .next
         ret

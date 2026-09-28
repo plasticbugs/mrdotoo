@@ -207,6 +207,8 @@ pf_drops:       ds 2            ; vblanks skipped so the pathfinder could run
 
         org $C000                       ; bank 29 (IMG_BANK_EXTRA): the romhack's
         incbin "build/images/extra.bin" ; EXTRA screen (tools/gen_images.py)
+        ds $E000-$, $FF                 ; VERY GOOD's landed picture (vgland.asm)
+        incbin "build/images/vgland.bin"
         ds $10000-$, $FF
 
         org $C000                       ; bank 30 (SPR_BANK_W): Mr. Do's white
@@ -399,7 +401,6 @@ nmi:
         push bc
         push de
         push hl
-        in a, (VDP_CTRL)        ; ack
         ld hl, (frame_cnt)
         inc hl
         ld (frame_cnt), hl
@@ -407,11 +408,12 @@ nmi:
         ld hl, snd_due          ; the sound tick runs once per vblank (sound.asm)
         inc (hl)
         endif
-        ld a, (in_nmi)          ; our own work overran a frame: skip this one
-        or a
-        jr nz, .nested
-        inc a
-        ld (in_nmi), a
+        ld a, (in_nmi)          ; our own work overran a frame: skip this one.
+        or a                    ; No ack here: reading the status resets the
+        jr nz, .late            ; VDP's address latch, and the interrupted
+        in a, (VDP_CTRL)        ; code may be between the two bytes of an
+        ld a, 1                 ; address (the write then lands elsewhere).
+        ld (in_nmi), a          ; The interrupted NMI acks it when done.
 
         ld a, i                 ; P/V = IFF2: the arcade was not inside its
         ld a, 0                 ; handler (idle loop or pathfinder), so its
@@ -425,7 +427,7 @@ nmi:
         endif
         xor a
         ld (in_nmi), a
-
+        call late_ack           ; a vblank arrived while we worked: its ack
         ld a, i                 ; P/V = IFF2 = the arcade's interrupt enable
         jp po, .hold
         ld hl, 8                ; interrupted between the hook's `ei` and
@@ -459,6 +461,8 @@ nmi:
         di                      ; clears IFF2 too, like an IRQ acknowledge
         jp irq_enter
 
+.late:  ld a, 1
+        ld (nmi_late), a
 .nested:
         pop hl
         pop de
@@ -780,6 +784,18 @@ vdp_set_write:
         out (VDP_CTRL), a
         ret
 
+; A safe point of the NMI's work (no VRAM address half set): pay the ack a
+; nested vblank left (see nmi), so the interrupt line is released and the
+; next vblank raises a new NMI. Clobbers AF.
+late_ack:
+        ld a, (nmi_late)
+        or a
+        ret z
+        xor a
+        ld (nmi_late), a
+        in a, (VDP_CTRL)
+        ret
+
 ; HL = VRAM address, BC = count, A = fill byte.
 vdp_fill:
         push af
@@ -897,6 +913,7 @@ font_len equ $-font
         include "image.asm"
         include "sound.asm"
         include "hud.asm"
+        include "vgland.asm"
         include "build/tiles/hud.inc"
 
         assert $ <= OPT_BASE
