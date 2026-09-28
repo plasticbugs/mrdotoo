@@ -53,6 +53,7 @@ Arcade-faithful port of Mr. Do! (Universal 1982) to the ColecoVision + Super Gam
 - `make validate FRAMES=n SEED=s` records n vblank handlers in MAME (`tools/diff/mame_record.lua`, scripted random play), replays the same inputs on `build/mrdo_validate.rom` in openMSX (`tools/diff/cv_replay.tcl`), and compares work RAM plus video RAM at the same sync point of every handler (`tools/diff/compare.py`). Relocated pointers held in RAM compare as equal.
 - Validation mode runs the background pathfinder to completion with the vblank held off, identically in both emulators. Otherwise the result depends on CPU speed (the arcade's pathfinder progress per frame is a function of its 4 MHz Z80) and the RAM diverges for timing reasons alone.
 - MAME inputs are injected by the read tap and latched at handler start. MAME's own input system updates once per frame, which can land mid-handler.
+- RAM validation cannot see rendering bugs. `tools/diff/compare_frames.sh SEED CAM H1 H2 ...` captures MAME and the normal build at the same handlers and writes a side-by-side sheet (build/frames.png) with a per-frame pixel agreement (baseline ~81% with correct sprites; a sprite placement bug shows up at a glance).
 - Debug aids (env vars): `WATCH=addr` (MAME: arcade address; openMSX: CV address) logs writes with PC and handler; `RTRACE`, `ITRACE`, `HTRACE` trace fg-tile reads, input reads and handler entries.
 
 ## Build and test
