@@ -27,6 +27,14 @@ VGL_SAT2        equ VGL_DATA + $730
 VGL_FR1         equ VGL_DATA + $760
 VGL_FR2         equ VGL_DATA + $7B0
 VGL_TILES       equ 59
+VGL_IPT         equ VGL_DATA + $800 ; the round-end icons' tiles (22, codes
+VGL_ICT         equ VGL_DATA + $A00 ;   vgl_base - VGL_ICONS..: the top of
+VGL_IMAP        equ VGL_DATA + $B00 ;   the band's second slot bank, which
+VGL_IOV         equ VGL_DATA + $B18 ;   the letter monster (<= 20) never
+VGL_ICONS       equ 22              ;   reaches), names, overlays
+VGL_SPRS        equ 22              ; sprite patterns (20 + 2 icon overlays)
+        assert VGL_ICT - VGL_IPT == VGL_CT - VGL_PT
+        assert VGL_ICONS <= SCN_SLOTS - 20
 VGL_COL         equ 5               ; = tools/gen_images.py VG_COL, VG_ROW
 VGL_ROW         equ 16
 VGL_CHUNK       equ 192             ; bytes uploaded per vblank (spaced)
@@ -36,7 +44,7 @@ VGL_NONE        equ $80             ; vgl_x0: not placed yet
 ; Variables: the driver's area is full; these sit after SCN_LIST in the
 ; same unused arcade padding (cleared by render_init).
 vgl_on          equ SCN_LIST + SCN_SLOTS    ; the VERY GOOD screen is up
-vgl_step        equ vgl_on + 2      ; upload step (4 = done)
+vgl_step        equ vgl_on + 2      ; upload step (6 = done; 4 = picture's tiles in)
 vgl_done        equ vgl_on + 3      ; bytes of the step done (2)
 vgl_base        equ vgl_on + 5      ; code of romhack tile 1
 vgl_phase       equ vgl_on + 6      ; frame (the legs)
@@ -224,35 +232,39 @@ vgl_tick:
         ld a, (vgl_step)
         or a
         jr nz, .up
-        ld hl, VR_SAT           ; step 0: no sprites while their patterns load
-        call vdp_set_write
-        ld a, SAT_END
-        out (VDP_DATA), a
+        call vgl_hide           ; step 0: no sprites while their patterns load
         ld a, 1
         ld (vgl_step), a
         ret
-.up:    cp 4
-        jr nc, .run
+.up:    cp 6
+        jp nc, .run
         ld hl, VR_SPT           ; step 1: sprite patterns
         ld de, VGL_SPT
-        ld bc, 20*32
+        ld bc, VGL_SPRS*32
         dec a
         jr z, .job
-        ld a, (vgl_base)        ; steps 2, 3: tile patterns, colours
-        ld l, a
+        cp 3                    ; steps 2, 3: the picture's tile patterns,
+        ld a, (vgl_base)        ; colours; 4, 5: the icons'
+        ld de, VGL_PT
+        ld bc, VGL_TILES*8
+        jr c, .t
+        sub VGL_ICONS
+        ld de, VGL_IPT
+        ld bc, VGL_ICONS*8
+.t:     ld l, a
         ld h, 0
         add hl, hl
         add hl, hl
         add hl, hl
-        ld de, VGL_PT
-        ld bc, VGL_TILES*8
         ld a, (vgl_step)
-        cp 2
-        jr z, .job
+        rra
+        jr nc, .job             ; (even steps: patterns)
         ld a, h
         add a, high VR_CT
         ld h, a
-        ld de, VGL_CT
+        ld a, d                 ; (colours $200 after the patterns)
+        add a, 2
+        ld d, a
 .job:   push hl                 ; HL = VRAM, DE = source, BC = length
         ld hl, (vgl_done)
         add hl, de
@@ -296,7 +308,8 @@ vgl_tick:
         ret
 .skip:  pop hl
         ret
-.run:   ld a, (frame_cnt)       ; the legs, every 8 vblanks
+.run:   call vgl_icons
+        ld a, (frame_cnt)       ; the legs, every 8 vblanks
         and 7
         jr nz, .spr
         ld a, (vgl_phase)
@@ -320,11 +333,7 @@ vgl_tick:
         ld (hl), a
         cp VGL_NONE
         jr nz, vgl_sat
-        ld hl, VR_SAT           ; the block is gone: so are they
-        call vdp_set_write
-        ld a, SAT_END
-        out (VDP_DATA), a
-        ret
+        jp vgl_hide             ; the block is gone: so are they
 ; The romhack's sprites for block column A (signed) and the current frame.
 vgl_sat:
         sub VGL_COL             ; pixels to add: (column - VGL_COL) * 8
@@ -384,8 +393,217 @@ vgl_sat:
         out (VDP_DATA), a
         pop bc
         djnz .e
+        ret                     ; (vgl_icons ends the SAT)
+
+; SAT entries 0-9 (the picture's sprites) off the screen, 10 = the end.
+vgl_hide:
+        ld hl, VR_SAT
+        call vdp_set_write
+        ld b, 10
+.e:     ld a, $D1               ; (not the $D0 terminator)
+        out (VDP_DATA), a
+        ld c, 3
+        nop
+        nop
+.z:     xor a
+        nop
+        out (VDP_DATA), a
+        dec c
+        jr nz, .z
+        djnz .e
+        nop
         ld a, SAT_END
         out (VDP_DATA), a
+        ret
+
+; The arcade's round-end icons: one sprite per SCENE line, the reason the
+; round ended ($2D creep, $6E cherries, $69 diamond, $51 letter monster).
+; The romhack's 2 x 3 tile icon for it goes into both name tables at the
+; sprite's place (col = x / 8, rows from (y + 4) / 8 - 1: centred on the
+; line), and its black overlay sprite (cherries, creep) into SAT entries
+; 10-12, then the end. Every vblank: full redraws and flips may repaint the
+; cells. Clobbers everything.
+        assert high ARC_SPRITES == high (ARC_SPRITES + 127)
+vgl_icons:
+        ld hl, ARC_SPRITES
+        ld b, 32
+.n:     push bc
+        push hl
+        call vgl_icon           ; A = reason 0-3 (carry: none), D = row, E = col
+        jr c, .nx
+        ld c, a                 ; names: VGL_IMAP + reason * 6
+        add a, a
+        add a, c
+        add a, a
+        ld hl, VGL_IMAP
+        add a, l
+        ld l, a
+        ld a, (pnt_front)
+        call .tab
+        ld a, (pnt_back)
+        call .tab
+.nx:    pop hl
+        pop bc
+        inc l                   ; (ARC_SPRITES + 128 stays in one page)
+        inc l
+        inc l
+        inc l
+        inc l                   ; Y of the entry = 0: the queue's end
+        ld a, (hl)
+        dec l
+        or a
+        jr z, .sat
+        djnz .n
+.sat:   ld hl, VR_SAT + 40      ; the overlays
+        call vdp_set_write
+        ld hl, ARC_SPRITES
+        ld b, 32
+.s:     push bc
+        push hl
+        call vgl_icon
+        jr c, .sx
+        add a, a                ; VGL_IOV + reason * 2
+        ld hl, VGL_IOV
+        add a, l
+        ld l, a
+        ld a, (hl)              ; pattern (0: none)
+        or a
+        jr z, .sx
+        ld c, a
+        inc l
+        ld a, d                 ; Y = row * 8 + dy
+        add a, a
+        add a, a
+        add a, a
+        add a, (hl)
+        out (VDP_DATA), a
+        ld a, e                 ; X = col * 8
+        add a, a
+        add a, a
+        add a, a
+        nop
+        out (VDP_DATA), a
+        ld a, c
+        push hl
+        pop hl
+        out (VDP_DATA), a
+        ld a, 1                 ; black
+        push hl
+        pop hl
+        out (VDP_DATA), a
+.sx:    pop hl
+        pop bc
+        ld de, 4
+        add hl, de
+        inc l
+        ld a, (hl)
+        dec l
+        or a
+        jr z, .end
+        djnz .s
+.end:   ld a, SAT_END
+        out (VDP_DATA), a
+        ret
+; A = name table high byte, HL -> the icon's 6 names, D = row, E = col:
+; its 3 rows of 2. Preserves HL, DE.
+.tab:   push hl
+        push de
+        ld c, a
+        ld b, 3
+.r:     push bc
+        push hl
+        ld l, d                 ; table + row * 32 + col
+        ld h, 0
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        ld a, l
+        or e
+        ld l, a
+        ld a, h
+        add a, c
+        ld h, a
+        call vdp_set_write
+        pop hl
+        call .nm
+        inc hl
+        push hl                 ; (spacing)
+        pop hl
+        call .nm
+        inc hl
+        pop bc
+        inc d
+        djnz .r
+        pop de
+        pop hl
+        ret
+.nm:    ld a, (hl)              ; icon tile index + 1 (0 = black)
+        or a
+        jr z, .o
+        add a, low (-VGL_ICONS - 1)
+        push hl
+        ld hl, vgl_base
+        add a, (hl)
+        pop hl
+.o:     out (VDP_DATA), a
+        ret
+
+; HL -> a sprite RAM entry (code, Y, colour, X): an icon? A = reason 0-3,
+; D = top tile row, E = tile column; carry if not (or off the screen).
+vgl_icon:
+        ld a, (hl)              ; code
+        and $7F
+        ld c, 0
+        cp $2D
+        jr z, .k
+        inc c
+        cp $6E
+        jr z, .k
+        inc c
+        cp $69
+        jr z, .k
+        inc c
+        cp $51
+        jr nz, .no
+.k:     inc l
+        ld a, (hl)              ; Y: screen x = 224 - Y
+        or a
+        jr z, .no
+        cpl
+        sub 31
+        jr c, .no
+        cp 240
+        jr nc, .no
+        rrca
+        rrca
+        rrca
+        and $1F
+        ld e, a
+        inc l
+        inc l
+        ld a, (cam)             ; X: screen y = 240 - cam * 8 - X
+        add a, a
+        add a, a
+        add a, a
+        neg
+        add a, 240
+        sub (hl)
+        jr c, .no
+        add a, 4
+        rrca
+        rrca
+        rrca
+        and $1F
+        dec a
+        cp 22
+        jr nc, .no              ; (3 rows must fit)
+        ld d, a
+        ld a, c
+        or a
+        ret
+.no:    scf
         ret
 
 ; B = screen row, C = block row: that row of the current frame, clipped to

@@ -81,10 +81,18 @@ RH_COL, RH_ROW = 10, 17
 def vgland():
     """build/images/vgland.bin (bank 29 at $E000, src/vgland.asm):
       +$000 patterns of tiles $01-$3B (59 x 8)   +$200 their colours
-      +$400 sprite patterns, 80 x 8 (20 16x16 sprites)
+      +$400 sprite patterns, 88 x 8 (22 16x16 sprites: the picture's 20, the
+            icons' two black overlays, patterns 80 and 84)
       +$700 frame 1 SAT (10 x 4, $D0)            +$730 frame 2 SAT
       +$760 frame 1 names, 14 x 5 (romhack tile numbers, 0 = black)
-      +$7B0 frame 2 names, rows 3-4 of the block, 14 x 2"""
+      +$7B0 frame 2 names, rows 3-4 of the block, 14 x 2
+      +$800 patterns of the icon tiles $3C-$51 (22 x 8)  +$A00 their colours
+      +$B00 per round-end reason 1-4 (monsters, cherries, diamond, EXTRA)
+            the icon's 2 x 3 names (icon tile index + 1, 0 = black)
+      +$B18 per reason: overlay sprite pattern (0 = none), its SAT Y minus
+            the icon's top line
+    The romhack's per-scene completion icons (PRINT_ICON), drawn where the
+    arcade queues its icon sprite."""
     pt = H.pletter(H.db_block(H.CORE, "intermission_char"))
     ct = H.pletter(H.db_block(H.CORE, "intermission_color"))
     spt = H.pletter(H.db_block(H.CORE, "intermission_sprites"))
@@ -92,12 +100,21 @@ def vgland():
     fr2 = db_exprs(H.CORE, "cvb_FR2")
     sp = [db_exprs(H.CORE, "cvb_SP1"), db_exprs(H.CORE, "cvb_SP2")]
     assert len(fr1) == 70 and len(fr2) == 28 and all(len(x) == 40 for x in sp)
-    assert max(fr1 + fr2) == 0x3B and len(spt) >= 640
+    assert max(fr1 + fr2) == 0x3B and len(spt) >= 704 and len(pt) >= 0x52 * 8
     dy, dx = (VG_ROW - RH_ROW) * 8, (VG_COL - RH_COL) * 8
-    blob = bytearray(0x800)
+    blob = bytearray(0x1000)
     blob[0x000:0x000 + 59 * 8] = pt[8:60 * 8]
     blob[0x200:0x200 + 59 * 8] = ct[8:60 * 8]
-    blob[0x400:0x400 + 640] = spt[:640]
+    blob[0x400:0x400 + 704] = spt[:704]
+    blob[0x800:0x800 + 22 * 8] = pt[0x3C * 8:0x52 * 8]
+    blob[0xA00:0xA00 + 22 * 8] = ct[0x3C * 8:0x52 * 8]
+    for r, name in enumerate(("MONSTER_ICON", "CHERRY_ICON", "DIAMOND_ICON", "EXTRA_ICON")):
+        ic = db_exprs(H.CORE, name)
+        assert len(ic) == 6 and all(t == 0 or 0x3C <= t <= 0x51 for t in ic)
+        blob[0xB00 + r * 6:0xB06 + r * 6] = bytes(t - 0x3B if t else 0 for t in ic)
+    # CHERRY_Y_POS / MONSTER_Y_POS (5 / 4 over icon rows at 8): drawn 2 / 3
+    # lines above the icon's top (the TMS9918 draws SAT Y + 1)
+    blob[0xB18:0xB20] = bytes([84, (-4) & 0xFF, 80, (-3) & 0xFF, 0, 0, 0, 0])
     for k, s in enumerate(sp):
         sat = bytearray()
         for i in range(10):
