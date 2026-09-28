@@ -19,6 +19,7 @@ and dedupes. Output (build/tiles/):
   dirt.bin    31 x 2: (bg attr, bg tile) that identifies each colourway
   preview_*.png  a recorded arcade frame rendered through the tables
 """
+import json
 import os
 import sys
 from collections import Counter
@@ -123,6 +124,72 @@ def screen2_pixels(pat, col):
             for y in range(8)]
 
 
+CHERRY_RED = 8                  # TMS medium red: the cherries
+CHERRY_QUAD = {(0, 0): 0x79, (1, 0): 0x7B, (0, 1): 0x78, (1, 1): 0x7A}   # player view -> fg tile
+CHERRIES_JSON = HERE_DATA = Path(__file__).resolve().parent / "data" / "cherries.json"
+
+
+def _dist(a, b):
+    return sum((x - y) ** 2 for x, y in zip(TMS[a], TMS[b]))
+
+
+def _draft_row(cols, mask):
+    """8 TMS colours + cherry mask -> the same 8 using at most 2 colours:
+    the pair (of the colours present) with the least colour error, cherry
+    pixels weighing 4x dirt; every pixel takes the nearer of the two. (Keeping
+    the most-used pair instead painted the dirt between cherries red.)"""
+    cand = sorted(set(cols))
+    if len(cand) <= 2:
+        return list(cols)
+    def cost(a, b):
+        return sum((4 if m else 1) * min(_dist(c, a), _dist(c, b)) for c, m in zip(cols, mask))
+    _, a, b = min((cost(a, b), a, b) for i, a in enumerate(cand) for b in cand[i + 1:])
+    return [a if _dist(c, a) <= _dist(c, b) else b for c in cols]
+
+
+def cherry_design(dirt_pair):
+    """16x16 TMS colours (player view) of the cherry over this level's dirt:
+    the Cherry Lab's saved design (tools/data/cherries.json, key 'aa/tt') if
+    any, else the draft made from the arcade's cherry layered over the dirt."""
+    key = "%02x/%02x" % dirt_pair
+    if CHERRIES_JSON.exists():
+        saved = json.loads(CHERRIES_JSON.read_text()).get(key)
+        if saved:
+            return [saved[y * 16:y * 16 + 16] for y in range(16)]
+    tms = [[1] * 16 for _ in range(16)]
+    msk = [[0] * 16 for _ in range(16)]
+    for (qx, qy), t in CHERRY_QUAD.items():
+        out = [[(0, 0, 0)] * 8 for _ in range(8)]
+        m = [[0] * 8 for _ in range(8)]
+        for layer, tiles, (attr, tile) in ((0, _BGT, dirt_pair), (1, _FGT, (0, t))):
+            art = tiles[tile + ((attr & 0x80) << 1)]
+            line = (attr & 0x3F) * 4
+            for y in range(8):
+                for x in range(8):
+                    pen = art[y][x]
+                    if pen or attr & 0x40:
+                        out[y][x] = _PAL[line + pen]
+                        if layer == 1 and pen:
+                            m[y][x] = 1
+        out, m = rot(out), rot(m)
+        for y in range(8):
+            for x in range(8):
+                tms[qy * 8 + y][qx * 8 + x] = tms_index(out[y][x])
+                msk[qy * 8 + y][qx * 8 + x] = m[y][x]
+    out = [_draft_row(tms[y][0:8], msk[y][0:8]) + _draft_row(tms[y][8:16], msk[y][8:16]) for y in range(16)]
+    # A half-row that keeps the cherry's red and its black outline has no
+    # colour left for the dirt: the dirt there turns black (a shadow behind
+    # the cherries) instead of red.
+    for y in range(16):
+        for h in (0, 8):
+            seg = out[y][h:h + 8]
+            if CHERRY_RED in seg and 1 in seg:
+                for x in range(h, h + 8):
+                    if not msk[y][x]:
+                        out[y][x] = 1
+    return out
+
+
 def apple_sprite():
     """The resting apple sprite as drawn: 16x16 mask (player view) and its TMS
     colour (build/sprites: code $5E, flip 0, colour line 5)."""
@@ -137,6 +204,8 @@ def main():
     gfx1, gfx2, _, proms = load_all()
     fgt, bgt = decode_chars(gfx1), decode_chars(gfx2)
     pal = build_palette(proms)
+    global _FGT, _BGT, _PAL
+    _FGT, _BGT, _PAL = fgt, bgt, pal
     cways = [(ROM[0x06E6 + i * 2], ROM[0x06E7 + i * 2]) for i in range(31)]
     global apple_mask, APPLE_COLOUR
     apple_mask, APPLE_COLOUR = apple_sprite()
@@ -205,8 +274,17 @@ def main():
         tbla, tblb = bytearray([plain_dirt] * 256), bytearray([black] * 256)
         for t in GAMEPLAY_FG:
             attr = CENTER_ATTR if t in CENTER_ART[2] else 0
-            tbla[t] = code_of(compose(dirt_pair, t, attr))
+            if t not in CHERRY_QUAD.values():   # (over dirt: designed, below)
+                tbla[t] = code_of(compose(dirt_pair, t, attr))
             tblb[t] = code_of(compose(blank_bg, t, attr))
+        # Cherries over dirt: designed per level look (tools/data/cherries.json
+        # from the Cherry Lab, else the 2-colours-per-row draft) instead of
+        # the composed arcade layers, whose reduction dropped different
+        # details on every background.
+        design = cherry_design(dirt_pair)
+        for (qx, qy), t in CHERRY_QUAD.items():
+            cell = [design[qy * 8 + y][qx * 8:qx * 8 + 8] for y in range(8)]
+            tbla[t] = code_of(to_screen2(cell))
         for t in FONT:          # text over black (HUD / messages in the field)
             tblb[t] = code_of(compose(blank_bg, t, FONT_ATTR))
         # Dessert plates (the center prize): background tiles phase*4+k in
@@ -215,7 +293,6 @@ def main():
         # every set, so the renderer needs no lookup: a non-dirt cell whose
         # bg attribute has bit 7 set shows code DESSERT_BASE + bg tile.
         used.append(len(pats))
-        assert len(pats) <= 161, "codes 161-162 are the HUD's (tools/gen_hud.py HUD_EXTRA)"
         # The dessert's score (arcade $30FD): bg tile $16 + food ("10" ...
         # "80") and $15 ("00"), attribute 9, in the plate's left cells. "00"
         # has code SCORE_BASE; the other half is loaded into SCORE_BASE + 1

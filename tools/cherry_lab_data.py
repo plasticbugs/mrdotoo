@@ -78,10 +78,8 @@ for n, (pair, levels) in enumerate(groups.items()):
                 tms[qy * 8 + y][qx * 8 + x] = G.tms_index(rgb[y][x])
                 msk[qy * 8 + y][qx * 8 + x] = m[y][x]
                 cur[qy * 8 + y][qx * 8 + x] = cp[y][x]
-    draft = [[0] * 16 for _ in range(16)]
-    for y in range(16):
-        for half in (0, 8):
-            draft[y][half:half + 8] = draft_row(tms[y][half:half + 8], msk[y][half:half + 8])
+    G._FGT, G._BGT, G._PAL = fgt, bgt, pal
+    draft = G.cherry_design(pair)         # the ROM's default (tools/gen_tiles.py)
     dirt = tile_px(ci, page[0x77])
     lv = [l + 1 for l in levels]
     name = 'Chomper red' if pair == (0x28, 0x0C) else 'Scene ' + ', '.join(str(l) for l in lv[:4])

@@ -52,3 +52,4 @@ recordings, one folder per milestone. Files here are committed; `build/` is not.
 - `15-hud/extra_collected_green.png`: collected EXTRA letters light green (user's pick); a marked collected letter green on blue.
 - `18-apple-tiles/`: resting apples drawn as background tiles (out of the sprite budget); the handoff to the wobbling sprite frame by frame; the apple tiles over three levels' dirt.
 - `19-cherry-lab/`: the Cherry Lab page (one cherry design per level look; published as a private artifact) and a first comparison: arcade original / current CV / draft.
+- `19-cherry-lab/ingame_*`: the drafted cherries in game: 12 scenes; before (red band beside the cherry bodies) and after (black band).
