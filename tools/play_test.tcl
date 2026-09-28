@@ -27,8 +27,8 @@ set throttle off
 after time 3   { inp 0xff 0xff }
 after time 4   { inp 0xff 0xbf }
 after time 4.1 { inp 0xff 0xff }
-after time 5   { inp 0xdf 0xff }
-after time 5.1 { inp 0xff 0xff }
+after time 5.5 { inp 0xdf 0xff }
+after time 6.0 { inp 0xff 0xff }
 after time 9   { status start }
 shot_at 9 start
 after time 10  { inp 0xfb 0xff }

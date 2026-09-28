@@ -134,11 +134,13 @@ emu.register_frame_done(function()
   end
   if finished == nil then return end
   if f == 600 then setf(P2, "Coin 1", 1) elseif f == 606 then setf(P2, "Coin 1", 0) end
-  if f == 700 then setf(P1, "1 Player Start", 1) elseif f == 706 then setf(P1, "1 Player Start", 0) end
+  if not os.getenv("NOSTART") then
+    if f == 700 then setf(P1, "1 Player Start", 1) elseif f == 706 then setf(P1, "1 Player Start", 0) end
+  end
   if os.getenv("ALPHA") and f > 1500 and f % 2400 == 0 then
     mem:write_u8(0xE0B2, mem:read_u8(0xE0B2) | 3)
   end
-  if f > 800 then
+  if f > 800 and not os.getenv("NOSTART") then
     hold = hold - 1
     if hold <= 0 then
       if cur then setf(P1, cur, 0) end

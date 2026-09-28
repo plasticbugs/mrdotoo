@@ -56,6 +56,7 @@ Arcade-faithful port of Mr. Do! (Universal 1982) to the ColecoVision + Super Gam
 - Debug aids (env vars): `WATCH=addr` (MAME: arcade address; openMSX: CV address) logs writes with PC and handler; `RTRACE`, `ITRACE`, `HTRACE` trace fg-tile reads, input reads and handler entries.
 
 ## Build and test
+- **Always run MAME with `SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy`** (plus `-video none -sound none`). Without it MAME activates as a macOS GUI app and pulls the user's screen to another Space. Recordings and `-snapshot_directory` screenshots work the same. openMSX is fine as is.
 - `make`: SjASMPlus builds `build/mrdo.rom` (256KB MegaCart image). `make run` starts openMSX. `make test` boots headless-ish for 4 emulated seconds, prints the self-test verdicts and saves `build/boot.png`.
 - openMSX machine `ColecoVision_SGM`, romtype `ColecoMegaCart`. openMSX Tcl scripts read symbols from `build/mrdo.sym`. Set `throttle on` for a few frames before `screenshot`, otherwise the capture is black.
 - Generated data goes to `build/` (created by `tools/*.py`, which import the do_disassemble tools via `$DO_DISASM`, default `~/work/do_disassemble`).

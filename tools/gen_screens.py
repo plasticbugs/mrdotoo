@@ -8,11 +8,11 @@ a Screen 2 tile (same rules as tools/gen_tiles.py), dedupes, and if more than
 SCREEN_MAX distinct tiles remain, maps the rarest onto their nearest kept tile.
 The runtime finds a cell's tile code through a 512-entry open-addressed hash:
 
-    h = (fg tile + (fg attr ^ bg tile ^ bg attr)) & 511, then h+1, h+2, ...
+    h = (fg tile + 4 * (fg attr ^ bg tile ^ bg attr)) & 1023, then h+1, h+2, ...
 
 Output (build/screens/):
   sets.bin   screens x SET_BYTES (tile set, same layout as playfield sets)
-  hash.bin   screens x 4KB: keys (512 x 4 bytes) then codes (512, $FF = empty)
+  hash.bin   screens x 5KB: keys (1024 x 4 bytes) then codes (1024, $FF = empty)
   index.bin  screens x 4: signature cell offset (word), signature fg tile, cam
   preview_NAME.png  a representative frame through the tables
 """
@@ -28,7 +28,9 @@ from mrdo_gfx import build_palette, decode_chars, load_all  # noqa: E402
 ROOT = HERE.parent
 OUT = ROOT / "build" / "screens"
 SCREEN_MAX = 224
-HASH_N = 512
+HASH_N = 1024
+HASH_BYTES = HASH_N * 5          # keys (4 each) then codes
+PER_BANK = 3
 SCREENS = ["title"]
 
 
@@ -49,7 +51,7 @@ def load(name):
 
 def hkey(k):
     a, b, c, e = k
-    return (e + (c ^ b ^ a)) & (HASH_N - 1)
+    return (e + ((c ^ b ^ a) << 2)) & (HASH_N - 1)
 
 
 def distance(t1, t2):
@@ -107,7 +109,7 @@ def main():
         blob += b"".join(c for _, c in kept) + bytes(8 * (G.MAX - len(kept)))
         assert len(blob) == G.SET_BYTES
         sets += blob
-        hashes += keys + codes + bytes(4096 - HASH_N * 5)
+        hashes += keys + codes
         index += bytes([sig[0] & 0xFF, sig[0] >> 8, sig[1], cam])
         print(f"{name}: {len(cells)} cells -> {len(weight)} tiles, {len(kept)} kept, "
               f"{merged} merged into their nearest; cam {cam}, signature ${sig[0]:03x}=${sig[1]:02x}")

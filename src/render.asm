@@ -24,7 +24,7 @@ SET_MAX         equ 224
 SET_BYTES       equ 2 + SET_MAX*16
 TBL_BANK        equ 12          ; per colourway: TBLA page, TBLB page; then dirt pairs
 SCR_SET_BANK    equ 15          ; non-gameplay screen tile sets, 4 per bank
-SCR_HASH_BANK   equ 16          ; their cell -> code hashes, 4KB each (3 per bank)
+SCR_HASH_BANK   equ 16          ; their cell -> code hashes, 5KB each (3 per bank)
 N_SCREENS       equ (scr_index_end - scr_index) / 4
 MODE_NONE       equ 0
 MODE_PLAYFIELD  equ 1
@@ -33,7 +33,7 @@ DIRT_PAIRS      equ $C000 + 31*512
 QUEUE_CELLS     equ 128         ; dirty queue: 128 x 2 bytes, one 256-byte page
 DRAIN_MAX       equ 40          ; queued cells drawn per vblank
 REDRAW_ROWS     equ 6           ; rows per vblank during a full redraw
-REDRAW_ROWS_SCR equ 3           ;   (screen mode: hashed lookups)
+REDRAW_ROWS_SCR equ 2           ;   (screen mode: hashed lookups)
 PF_ROWS         equ 24
 CAM_TOP         equ 3
 CAM_MID         equ 4
@@ -175,7 +175,14 @@ render_init:
         ld (cam), a
         ret
 
+; Every path out of here must leave ARC_HI_BANK mapped: the arcade's sound data
+; and scene code live in that window. render_body may leave any bank mapped.
 render:
+        call render_body
+        ld a, ARC_HI_BANK
+        jp select_bank
+
+render_body:
         ld a, (up_state)
         or a
         jp nz, upload_step
@@ -329,23 +336,28 @@ check_screens:
         ld a, (scr)
         cp c
         ret z
-.new:   ld a, c
+.new:   ld a, $FF               ; forget the last lookup (new hash table)
+        ld (scr_last), a
+        ld (scr_last+1), a
+        ld a, c
         ld (scr), a
         ld a, (hl)
         ld (cam), a             ; each screen has a fixed camera
         ld a, MODE_SCREEN
         ld (mode), a
-        ld a, c                 ; hash base page: $C0 + (scr % 3) * $10
+        ld a, c                 ; hash base page: $C0 + (scr % 3) * $14 (5KB each)
         ld b, a
         ld d, $C0
 .h3:    sub 3
         jr c, .hd
         jr .h3
 .hd:    add a, 3
-        rlca
-        rlca
-        rlca
-        rlca
+        ld e, a                 ; * $14 = * 20
+        add a, a
+        add a, a
+        add a, e                ; * 5
+        add a, a
+        add a, a                ; * 20
         add a, d
         ld (scr_hpage), a
         ld a, b                 ; set: bank SCR_SET_BANK + scr/4, slot scr%4
@@ -356,7 +368,9 @@ check_screens:
         ld a, c
         call set_address
         ld a, b
-        jp upload_start
+        call upload_start
+        ld a, ARC_HI_BANK
+        jp select_bank
 
 ; -----------------------------------------------------------------------------
 ; Tile set upload: patterns and colours into all three thirds, 512 bytes per
@@ -612,6 +626,7 @@ draw_run_scr:
 
 ; HL -> bg tile of a cell. Returns A = the screen tile for its (bg attr,
 ; bg tile, fg attr, fg tile), or 0 (black) if the capture never saw it.
+; 1024-entry open-addressed hash (tools/gen_screens.py), under half full.
 ; The hash bank is mapped. Clobbers BC, DE, HL.
 scr_lookup:
         ld a, h
@@ -627,13 +642,47 @@ scr_lookup:
         add a, 4
         ld h, a
         ld e, (hl)              ; fg tile
-        ld a, d                 ; h = (fg tile + (fg attr ^ bg tile ^ bg attr)) & 511
+        ld hl, scr_last         ; same cell contents as the last lookup? (runs of
+        ld a, (hl)              ; blank or repeated cells are the common case)
+        cp b
+        jr nz, .hash
+        inc l
+        ld a, (hl)
+        cp c
+        jr nz, .hash
+        inc l
+        ld a, (hl)
+        cp d
+        jr nz, .hash
+        inc l
+        ld a, (hl)
+        cp e
+        jr nz, .hash
+        inc l
+        ld a, (hl)
+        ret
+.hash:  ld hl, scr_last         ; remember this key; the code follows below
+        ld (hl), b
+        inc l
+        ld (hl), c
+        inc l
+        ld (hl), d
+        inc l
+        ld (hl), e
+        ld a, d                 ; h = (fg tile + 4*(fg attr ^ bg tile ^ bg attr)) & 1023
         xor c
         xor b
+        ld l, a
+        ld h, 0
+        add hl, hl
+        add hl, hl
+        ld a, l
         add a, e
         ld l, a
-        ld a, 0
-        adc a, 0
+        jr nc, .hc
+        inc h
+.hc:    ld a, h
+        and 3
         ld h, a
 .probe: push hl
         add hl, hl
@@ -656,17 +705,18 @@ scr_lookup:
         ld a, (hl)
         cp e
         jr nz, .miss
-        pop hl                  ; found: code at page + $800 + h
+        pop hl                  ; found: code at page + $1000 + h
         ld a, (scr_hpage)
-        add a, 8
+        add a, $10
         add a, h
         ld h, a
         ld a, (hl)
+        ld (scr_last + 4), a
         ret
 .miss:  pop hl
         push hl
         ld a, (scr_hpage)       ; empty slot ends the probe
-        add a, 8
+        add a, $10
         add a, h
         ld h, a
         ld a, (hl)
@@ -675,10 +725,11 @@ scr_lookup:
         jr z, .none
         inc hl
         ld a, h
-        and 1
+        and 3
         ld h, a
         jr .probe
 .none:  xor a
+        ld (scr_last + 4), a
         ret
 
 ; -----------------------------------------------------------------------------

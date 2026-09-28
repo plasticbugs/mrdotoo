@@ -38,6 +38,8 @@ ARC_LO_BANK     equ 1           ; arcade $0000-$5FFF in 8KB pieces, banks 1-3
         org DRV_RAM
 crowd_idx:      ds CROWD_MAX    ; crowded sprites: spr_list offsets
         assert high crowd_idx == high (crowd_idx + CROWD_MAX - 1)
+scr_last:       ds 5            ; last looked-up screen cell key + its code
+        assert high scr_last == high (scr_last + 4)
 frame_cnt:      ds 2            ; +1 per vblank
 irq_count:      ds 2            ; arcade vblank handler entries
 deferred_cnt:   ds 2            ; vblanks held because the arcade had interrupts off
