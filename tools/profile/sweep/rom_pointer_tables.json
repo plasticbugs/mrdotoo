@@ -1,0 +1,244 @@
+[
+ {
+  "lo_pc": "00E9",
+  "hi_pc": "00EB",
+  "words": 20,
+  "ptr_words": 20,
+  "table": "0156-01A3",
+  "regions": {
+   "E": 20
+  }
+ },
+ {
+  "lo_pc": "00EB",
+  "hi_pc": "00F0",
+  "words": 20,
+  "ptr_words": 3,
+  "table": "018B-01A0",
+  "regions": {
+   "B": 1,
+   "D": 1,
+   "C": 1
+  }
+ },
+ {
+  "lo_pc": "03D4",
+  "hi_pc": "03D6",
+  "words": 5,
+  "ptr_words": 5,
+  "table": "0B17-7ADB",
+  "regions": {
+   "8": 5
+  }
+ },
+ {
+  "lo_pc": "03D6",
+  "hi_pc": "03D8",
+  "words": 5,
+  "ptr_words": 4,
+  "table": "7AB6-7ADC",
+  "regions": {
+   "8": 4
+  }
+ },
+ {
+  "lo_pc": "0403",
+  "hi_pc": "0405",
+  "words": 34,
+  "ptr_words": 34,
+  "table": "0524-7BC5",
+  "regions": {
+   "8": 34
+  }
+ },
+ {
+  "lo_pc": "0405",
+  "hi_pc": "0407",
+  "words": 34,
+  "ptr_words": 6,
+  "table": "15A6-7AAF",
+  "regions": {
+   "8": 5,
+   "9": 1
+  }
+ },
+ {
+  "lo_pc": "0425",
+  "hi_pc": "0427",
+  "words": 3,
+  "ptr_words": 3,
+  "table": "1571-1590",
+  "regions": {
+   "8": 3
+  }
+ },
+ {
+  "lo_pc": "073F",
+  "hi_pc": "0747",
+  "words": 858,
+  "ptr_words": 111,
+  "table": "07CB-716C",
+  "regions": {
+   "C": 26,
+   "9": 21,
+   "A": 32,
+   "B": 3,
+   "D": 19,
+   "8": 4,
+   "E": 5,
+   "F": 1
+  }
+ },
+ {
+  "lo_pc": "0B33",
+  "hi_pc": "0B35",
+  "words": 50,
+  "ptr_words": 25,
+  "table": "0B7D-0BD2",
+  "regions": {
+   "8": 25
+  }
+ },
+ {
+  "lo_pc": "0E33",
+  "hi_pc": "0E38",
+  "words": 44,
+  "ptr_words": 5,
+  "table": "10D8-112B",
+  "regions": {
+   "F": 3,
+   "9": 1,
+   "8": 1
+  }
+ },
+ {
+  "lo_pc": "3BB1",
+  "hi_pc": "3BB3",
+  "words": 15,
+  "ptr_words": 5,
+  "table": "3D86-3DA5",
+  "regions": {
+   "B": 4,
+   "F": 1
+  }
+ },
+ {
+  "lo_pc": "3BB3",
+  "hi_pc": "3BB5",
+  "words": 15,
+  "ptr_words": 1,
+  "table": "3D9C-3D9D",
+  "regions": {
+   "F": 1
+  }
+ },
+ {
+  "lo_pc": "49B1",
+  "hi_pc": "49B3",
+  "words": 8,
+  "ptr_words": 6,
+  "table": "49BF-4AA0",
+  "regions": {
+   "8": 5,
+   "F": 1
+  }
+ },
+ {
+  "lo_pc": "49B3",
+  "hi_pc": "49B5",
+  "words": 8,
+  "ptr_words": 3,
+  "table": "4AA0-4ABD",
+  "regions": {
+   "8": 1,
+   "F": 2
+  }
+ },
+ {
+  "lo_pc": "49B5",
+  "hi_pc": "49B7",
+  "words": 8,
+  "ptr_words": 2,
+  "table": "4AA1-4AAE",
+  "regions": {
+   "D": 2
+  }
+ },
+ {
+  "lo_pc": "5ACC",
+  "hi_pc": "5ACF",
+  "words": 25,
+  "ptr_words": 25,
+  "table": "6008-60BD",
+  "regions": {
+   "E": 25
+  }
+ },
+ {
+  "lo_pc": "5B6C",
+  "hi_pc": "5B72",
+  "words": 25,
+  "ptr_words": 12,
+  "table": "6005-60BA",
+  "regions": {
+   "C": 4,
+   "D": 2,
+   "F": 1,
+   "8": 1,
+   "9": 2,
+   "B": 2
+  }
+ },
+ {
+  "lo_pc": "5B75",
+  "hi_pc": "5B78",
+  "words": 25,
+  "ptr_words": 14,
+  "table": "6007-60BC",
+  "regions": {
+   "8": 2,
+   "9": 4,
+   "A": 1,
+   "B": 2,
+   "C": 3,
+   "D": 1,
+   "E": 1
+  }
+ },
+ {
+  "lo_pc": "5B78",
+  "hi_pc": "5B7B",
+  "words": 25,
+  "ptr_words": 25,
+  "table": "6008-60BD",
+  "regions": {
+   "E": 25
+  }
+ },
+ {
+  "lo_pc": "5CDA",
+  "hi_pc": "5CDF",
+  "words": 36,
+  "ptr_words": 16,
+  "table": "61D5-7D38",
+  "regions": {
+   "D": 4,
+   "E": 1,
+   "F": 2,
+   "A": 4,
+   "B": 2,
+   "C": 3
+  }
+ },
+ {
+  "lo_pc": "7216",
+  "hi_pc": "721B",
+  "words": 20,
+  "ptr_words": 5,
+  "table": "7232-7243",
+  "regions": {
+   "B": 4,
+   "E": 1
+  }
+ }
+]

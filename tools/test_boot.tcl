@@ -12,13 +12,13 @@ proc symaddr {name} {
 }
 set throttle off
 # Fast-forward, then render a few real frames so the screenshot has content.
-after time 4 { set throttle on }
-after time 4.2 {
+after time $::env(MRDO_SECS) { set throttle on }
+after time [expr {$::env(MRDO_SECS) + 0.2}] {
   if {[catch {
     set fc [peek16 [symaddr frame_cnt]]
-    set ro [peek [symaddr ram_ok]]
-    set bo [peek [symaddr bank_ok]]
-    puts stderr "RESULT frame_cnt=$fc ram_ok=$ro bank_ok=$bo"
+    set ic [peek16 [symaddr irq_count]]
+    set dc [peek16 [symaddr deferred_cnt]]
+    puts stderr "RESULT vblanks=$fc arcade_irqs=$ic held=$dc pc=[format %04x [reg pc]]"
     screenshot -raw $::env(MRDO_SHOT)
   } err]} { puts stderr "RESULT error: $err" }
   exit

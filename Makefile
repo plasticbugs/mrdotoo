@@ -1,13 +1,20 @@
 # Mr. Do! arcade port for ColecoVision + SGM
 ROM      := build/mrdo.rom
 SRC      := $(wildcard src/*.asm src/*.inc)
-DATA     := build/font.bin
+DATA     := build/font.bin build/arc_lo.bin build/arc_hi.bin
+DIS      ?= $(HOME)/work/do_disassemble
 OPENMSX  ?= /Applications/openMSX.app/Contents/MacOS/openmsx
 
 all: $(ROM)
 
 build/font.bin: tools/gen_font.py
 	python3 tools/gen_font.py > /dev/null
+
+build/codemap.json: tools/codemap.py tools/z80dis.py tools/data/ghidra_functions.txt
+	python3 tools/codemap.py
+
+build/arc_lo.bin build/arc_hi.bin: tools/patch_arcade.py build/codemap.json
+	python3 tools/patch_arcade.py
 
 $(ROM): $(SRC) $(DATA)
 	sjasmplus --nologo --msg=war -Wno-fileorg --fullpath -Isrc --sym=build/mrdo.sym --lst=build/mrdo.lst src/main.asm

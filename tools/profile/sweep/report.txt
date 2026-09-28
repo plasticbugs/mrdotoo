@@ -1,0 +1,165 @@
+frames 255000 {'sweep/s1_attract.json': (30000, 6932), 'sweep/s2_play.json': (30000, 6597), 'sweep/s3_idle_alpha.json': (15000, 4730), 'sweep/s4_rand_alpha_letters.json': (30000, 8082), 'sweep/s5_rounds.json': (40000, 7572), 'sweep/s6_gameover_hiscore.json': (30000, 8230), 'sweep/s7_two_player.json': (30000, 8553), 'sweep/s8_two_player_cocktail.json': (30000, 8094), 'sweep/s9_nofire_alpha.json': (20000, 6904)}
+
+## VIDEO RAM
+r 8000 bg attr 1 PCs: 7AEF
+r 8400 bg tile 1 PCs: 7AFB
+r 8800 fg attr 0 PCs: 
+r 8C00 fg tile 18 PCs: 10B2 14F5 152C 1B81 1B87 1D63 1DE9 1E05 1E3F 1E5B 1E95 1EAE 1EE5 1EFE 2BCE 52A0 52B2 540E
+w 8000 bg attr 7 PCs: 03EF 0410 0448 045E 0473 310C 310F
+w 8400 bg tile 7 PCs: 03ED 0419 044A 045E 0474 3102 3107
+w 8800 fg attr 13 PCs: 03A5 03EF 0410 043B 0448 045E 0473 048D 0492 0F4D 1675 1855 7C9E
+w 8C00 fg tile 22 PCs: 03BB 03ED 0419 0440 044A 0474 0517 051D 0F47 1020 1027 1510 152F 167B 175B 17E4 185E 1B9E 1BB0 1BBF 1D67 7CA4
+read PCs detail:
+  10B2 ldir                       8C83-8F7C n=1248 q=1000
+  14F5 ld   a,(hl)                8D11-8ED3 n=450 q=1000
+  152C ld   a,(hl)                8C83-8F7C n=6240 q=1000
+  1B81 cp   (hl)                  8C83-8F7C n=104600 q=1000
+  1B87 ld   a,(hl)                8C83-8F7C n=51110 q=1000
+  1D63 ld   a,(hl)                8C88-8F70 n=1031 q=1000
+  1DE9 ld   a,(de)                8CA6-8F7C n=646 q=1000
+  1E05 ld   a,(de)                8C86-8F5C n=646 q=1000
+  1E3F ld   a,(de)                8CA3-8F6D n=467 q=1000
+  1E5B ld   a,(de)                8C83-8F4D n=467 q=1000
+  1E95 ld   a,(de)                8CE6-8F7C n=538 q=1000
+  1EAE ld   a,(de)                8CE5-8F7B n=538 q=1000
+  1EE5 ld   a,(de)                8C84-8F1C n=501 q=1000
+  1EFE ld   a,(de)                8C83-8F1B n=501 q=1000
+  2BCE ld   a,(hl)                8C83-8F7C n=57336 q=1000
+  52A0 ld   a,(de)                8EE7-8EE7 n=1 q=1000
+  52B2 ld   a,(de)                8EC7-8EC7 n=1 q=1000
+  540E ld   a,(hl)                8C90-8F76 n=32579 q=1000
+  7AEF ld   a,($8083)             8083-8083 n=3 q=0001
+  7AFB ld   a,($8483)             8483-8483 n=3 q=0010
+
+## WORK RAM
+touched bytes 2863 untouched 1233 minSP EB4C depth below EB80: 52
+touched ranges: E000-E006 E016-E081 E08D-E1BB E1C5-E3A9 E412-E42D E431-E44E E450-E450 E452-E46B E472-E48B E492-E4AC E4AE-E4AE E4B0-E4B0 E4B2-E4CC E4CE-E4CE E4D0-E4D0 E4D2-E4EC E4EE-E4EE E4F0-E4F0 E4F2-E50B E512-E52B E532-E54B E552-E56B E572-E58B E5A8-E5D1 E5E6-E94A EB4C-EB7F EC00-EC33 EC74-EC7A EC87-ECCE ED2F-EDF4 EE0B-EE8A EECB-EF4A EF75-EFC8
+read-only bytes 17 E002-E003 E42C-E42D E44C-E44E E450-E450 E4AC-E4AC E4AE-E4AE E4B0-E4B0 E4CC-E4CC E4CE-E4CE E4D0-E4D0 E4EC-E4EC E4EE-E4EE E4F0-E4F0
+write-only bytes 209 E11B-E11B E1A0-E1A0 E2B3-E2B3 E2FC-E2FC E30B-E30B E30D-E30D EC33-EC33 EC7A-EC7A EC8E-EC90 EC9A-EC9C ECA6-ECA8 ECB2-ECB4 ECBE-ECC0 ECCA-ECCC ED36-ED38 ED40-ED42 ED4C-ED4E ED56-ED58 ED62-ED64 ED6C-ED6E ED77-ED7A ED81-ED84 ED8D-ED90 ED97-ED9A EDA3-EDA6 EDAD-EDB0 EDBA-EDBC EDC4-EDC6 EDCF-EDD2 EDD9-EDDC EDE7-EDE8 EDF1-EDF2 EE12-EE14 EE1C-EE1E EE26-EE28 EE31-EE34 EE3B-EE3E EE45-EE48 EE51-EE54 EE5B-EE5E EE65-EE68 EE71-EE74 EE7B-EE7E EE85-EE88 EED2-EED4 EEDC-EEDE EEE6-EEE8 EEF1-EEF4 EEFB-EEFE EF05-EF08 EF11-EF14 EF1B-EF1E EF25-EF28 EF31-EF34 EF3B-EF3E EF45-EF48 EF7B-EF7E EF85-EF88 EF8F-EF92 EF9A-EF9C 
+
+## IO
+  9000-90FF +0     w n=2527404 vals 00-7F  PCs: 027F
+  9000-90FF +1     w n=13916992 vals 00-F4  PCs: 027F 0292
+  9000-90FF +2     w n=2527404 vals 02-3A  PCs: 027F
+  9000-90FF +3     w n=2527404 vals 00-FF  PCs: 027F
+  9800             w n=36 vals 00-E0  PCs: 00A6 0FED 14D2
+  9801             w n=1460426 vals 01-FF  PCs: 5AE7 5C3A 5C3E 5C45
+  9802             w n=1375428 vals 01-FF  PCs: 5AEE 5C3A 5C3E 5C45
+  9803             r n=708 vals        PCs: 0494
+  A000             r n=406899 vals        PCs: 0068 01E6 0EE0 0EEA 1739 177E 233B
+  A001             r n=254876 vals        PCs: 006C 01A9
+  A002             r n=236203 vals        PCs: 0593 1482 1A83 202F 3B6C 43EC 4428 50D6
+  A003             r n=109303 vals        PCs: 01CC 0207 0D2A 0D87 0D9A 0DA8 0F77 0FA1 1086
+  DC1A             w n=2 vals 3E-3E  PCs: 1761
+  DC1B             w n=2 vals 3E-3E  PCs: 1761
+  DC1C             w n=2 vals 3E-3E  PCs: 1761
+  F000-F7FF        w n=3881 vals 00-25  PCs: 045E 04B5
+  F800-FFFF        w n=35388 vals 00-FF  PCs: 045E 04B8 701E 7CBD
+
+## EXEC
+0000-5FFF code bytes 18432 instr 8895 ranges 114
+6000-6FFF code bytes 0 instr 0 ranges 0
+    
+7000-7FFF code bytes 1515 instr 654 ranges 12
+    7001-7069 706E-711D 716C-7191 71AF-722F 7258-73A4 796A-7A5C 7A6C-7AAC 7AE1-7BAF 7BD3-7BE1 7BE4-7C80 7C90-7CBA 7CBD-7CC0
+transfers into 7000-7FFF:
+  0402 ret                      -> 7A8A x77
+  0402 ret                      -> 7A93 x55
+  0402 ret                      -> 7AA3 x78
+  0402 ret                      -> 7AAC x44
+  0424 ret                      -> 710A x31
+  0424 ret                      -> 79C3 x12
+  0424 ret                      -> 7A81 x137
+  0424 ret                      -> 7A9A x138
+  0424 ret                      -> 7B2C x3
+  0424 ret                      -> 7B2F x3
+  0424 ret                      -> 7B32 x3
+  0424 ret                      -> 7C40 x39
+  045B ret                      -> 7088 x70
+  045B ret                      -> 7091 x70
+  045B ret                      -> 7097 x70
+  045B ret                      -> 709D x70
+  045B ret                      -> 733F x207
+  045B ret                      -> 73A1 x22
+  045B ret                      -> 79D7 x12
+  045B ret                      -> 7A1D x12
+  045B ret                      -> 7A2D x11
+  045B ret                      -> 7A38 x11
+  046B ret                      -> 705D x1984
+  046B ret                      -> 7069 x1984
+  046B ret                      -> 70A8 x70
+  046B ret                      -> 70EC x31
+  046B ret                      -> 70F8 x31
+  046B ret                      -> 7AFB x3
+  046B ret                      -> 7B07 x3
+  0484 ret                      -> 701B x31
+  0484 ret                      -> 7079 x70
+  0484 ret                      -> 7363 x92
+  0484 ret                      -> 7B10 x3
+  0484 ret                      -> 7B19 x3
+  0523 ret                      -> 70DD x31
+  0523 ret                      -> 7992 x12
+  0523 ret                      -> 7AEC x3
+  0592 ret                      -> 7348 x115
+  06E5 ret                      -> 7AEF x3
+  07A0 ret                      -> 70FE x31
+  0D81 call $706E               -> 706E x31
+  0DCA call $7001               -> 7001 x15903
+  0DCE call $70A9               -> 70A9 x35319
+  0F0C call $706E               -> 706E x8
+  1091 ret  nz                  -> 70E0 x31
+  19E9 call $796A               -> 796A x4489
+  19ED call $7AE1               -> 7AE1 x6
+  02D8 ret                      -> 7C7E x39
+  02E9 ret                      -> 79DE x12
+  02E9 ret                      -> 7B9F x3
+  03D3 ret                      -> 7B3E x3
+  03D3 ret                      -> 7B61 x3
+  03D3 ret                      -> 7C54 x39
+  03D3 ret                      -> 7C5B x39
+  03D3 ret                      -> 7C9D x45
+  03D3 ret                      -> 7CB3 x45
+
+## DATA READS 6000-7FFF
+  03D4 ld   e,(hl)              0B17-7ADA n=393
+  03D6 ld   d,(hl)              0B18-7ADB n=393
+  03D8 ld   a,(hl)              0B19-7ADC n=3193
+  03DA ld   c,(hl)              0B1A-7ADD n=3193
+  03DC ld   b,(hl)              0B1B-7ADE n=3193
+  03EB ld   a,(hl)              0AD7-7AE0 n=76283
+  0403 ld   e,(hl)              0524-7BC4 n=1473
+  0405 ld   d,(hl)              0525-7BC5 n=1473
+  0407 ld   a,(hl)              0526-7C89 n=1512
+  0409 ld   b,(hl)              0527-7C8A n=1512
+  0417 ld   a,(hl)              0528-7C8F n=7906
+  073F ld   a,(hl)              07CB-716B n=7878
+  0747 ld   a,(hl)              07CB-716B n=7878
+  0771 ld   a,(de)              07CB-716B n=7878
+  077F ld   a,(de)              07CB-716B n=7878
+  5ACC ld   e,(ix+$03)          6008-60BC n=318804
+  5ACF ld   d,(ix+$04)          6009-60BD n=318804
+  5B46 cp   (iy+$00)            6005-60B4 n=3312
+  5B6C ld   a,(iy+$00)          6005-60B9 n=2107
+  5B72 ld   l,(iy+$01)          6006-60BA n=8087
+  5B75 ld   h,(iy+$02)          6007-60BB n=8087
+  5B78 ld   e,(iy+$03)          6008-60BC n=8087
+  5B7B ld   d,(iy+$04)          6009-60BD n=8087
+  5B81 ld   a,(hl)              60C2-61BE n=8087
+  5B8B ldir                     60C3-61CA n=49056
+  5BD0 ld   c,(ix+$00)          6005-608C n=181558
+  5BF0 ld   a,(ix+$00)          6005-60B9 n=183978
+  5C98 ld   a,(hl)              61D0-7DC3 n=251874
+  5CDA ld   a,(hl)              61D5-7DC3 n=4954
+  5CDF ld   e,(hl)              61D6-7DC4 n=9565
+  5CE1 ld   d,(hl)              61D7-7DC5 n=9565
+  5DC3 ld   a,(hl)              61D1-7DC1 n=215650
+  5DD2 ld   a,(hl)              61D2-7DC2 n=215650
+  5DFA ld   a,(hl)              61D2-7DC2 n=215650
+  7052 ld   a,(hl)              706A-706C n=1984
+  7061 ld   a,(de)              706B-706D n=1984
+  7185 ldir                     7192-7198 n=217
+  718A ldir                     7199-719F n=217
+  7216 ld   a,(hl)              7230-7256 n=473
+  721B ld   a,(hl)              7231-7257 n=473
+  7C78 ld   b,(hl)              7C81-7C83 n=39
+  7C7A ld   c,(hl)              7C82-7C84 n=39

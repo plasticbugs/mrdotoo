@@ -50,11 +50,33 @@ MC_HOTSPOT      equ $FFC0
 MC_BANKS        equ 8           ; 128KB image; raise as content grows
 MC_FIXED        equ MC_BANKS-1
 
-; --- SGM RAM map ------------------------------------------------------------------
-; $0000-$00FF  Z80 vectors (installed at boot once the BIOS is swapped out)
-; $6000-$6FFF  arcade work RAM ($E000-$EFFF), same low 12 bits  [phase 1]
-; $7C00-$7EFF  driver variables
-; $7F00-$7FFF  stack (grows down from $8000)
+; --- Memory map at run time (see tools/patch_arcade.py) -----------------------------
+; $0000-$5FFF  RAM: arcade code + tables at their ORIGINAL addresses (patched copy)
+;              $0008 = pending-vblank hook (the arcade's `ei`s became `rst $08`)
+;              $0066 = our NMI vector (arcade had `retn` there)
+;              $59D0-$5A7F = driver variables (unused $FF padding in the arcade ROM)
+; $6000-$6FFF  RAM: arcade work RAM ($E000-$EFFF); arcade stack tops at $6B80
+;              $63B0-$63B9 = I/O cells ($9800-3, $A000-3, scroll $F000/$F800)
+;              $6950-$6A4F = arcade sprite RAM copy ($9000-$90FF)
+; $7000-$7FFF  RAM: arcade video RAM ($8000-$8FFF); fg tiles at $7C00
+; $8000-$BFFF  ROM fixed bank: this driver
+; $C000-$DFFF  ROM window, bank ARC_HI_BANK: arcade $6000-$7FFF (sound data + scenes)
 ARC_WORK        equ $6000
-DRV_RAM         equ $7C00
-STACK_TOP       equ $8000
+ARC_VRAM        equ $7000
+ARC_FG_TILE     equ ARC_VRAM + $0C00
+ARC_SPRITES     equ $6950
+IO_CELLS        equ $63B0
+IO_FLIP         equ IO_CELLS+0
+IO_IN0          equ IO_CELLS+4      ; P1: 0 left 1 down 2 right 3 up 4 fire 5 1P start 6 2P start 7 tilt
+IO_IN1          equ IO_CELLS+5      ; P2: same, 6 coin 1, 7 coin 2 (all active low)
+IO_DSW1         equ IO_CELLS+6
+IO_DSW2         equ IO_CELLS+7
+IO_SCROLL_X     equ IO_CELLS+8
+IO_SCROLL_Y     equ IO_CELLS+9
+DSW1_DEFAULT    equ $DF             ; MAME defaults: upright, 3 lives, normal difficulty
+DSW2_DEFAULT    equ $FF             ; 1 coin 1 credit
+DRV_RAM         equ $59D0
+DRV_RAM_END     equ $5A80
+ARC_IRQ         equ $00B8           ; arcade vblank handler
+ARC_RESET       equ $0000
+BOOT_STACK      equ $6B80

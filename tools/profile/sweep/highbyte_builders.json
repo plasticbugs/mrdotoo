@@ -1,0 +1,230 @@
+[
+ {
+  "kind": "B hi arith",
+  "pc": "035F",
+  "ins": "adc  a,$00",
+  "ctx": " | prev: ld   (iy+$19),a; ld   e,a; ld   a,d | next: daa; ld   (iy+$18),a; ld   d,a"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "06B1",
+  "ins": "and  $F0",
+  "ctx": " | prev: daa; jr   $06A7; ld   c,a | next: rrca; ld   b,a; rrca"
+ },
+ {
+  "kind": "C cmp hi",
+  "pc": "2412",
+  "ins": "cp   $D8",
+  "ctx": " | prev: ld   e,(iy+$03); ld   a,d"
+ },
+ {
+  "kind": "A ld hi,imm",
+  "pc": "2726",
+  "ins": "ld   b,$98",
+  "ctx": ""
+ },
+ {
+  "kind": "A ld hi,imm",
+  "pc": "2810",
+  "ins": "ld   b,$98",
+  "ctx": ""
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "3472",
+  "ins": "and  $F0",
+  "ctx": " | prev: ret; inc  (ix+$05); ld   a,(ix+$01) | next: ld   b,a; ld   a,(ix+$03); and  $F0"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "36C8",
+  "ins": "and  $F0",
+  "ctx": " | prev: bit  7,(ix+$07); jr   nz,$36F4; ld   a,(ix+$01) | next: ld   b,a; ld   a,(ix+$03); inc  a"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "375D",
+  "ins": "and  $F0",
+  "ctx": " | prev: bit  2,a; jr   nz,$3769; ld   a,(ix+$01) | next: ld   b,a; ld   a,($E1C6); and  $F0"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "376C",
+  "ins": "and  $F0",
+  "ctx": " | prev: jr   c,$3796; ret; ld   a,($E1C6) | next: ld   b,a; ld   a,(ix+$01); and  $F0"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "377C",
+  "ins": "and  $F0",
+  "ctx": " | prev: ret; ld   a,(ix+$03); inc  a | next: ld   b,a; ld   a,($E1C8); and  $F0"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "378B",
+  "ins": "and  $F0",
+  "ctx": " | prev: jr   c,$3796; ret; ld   a,($E1C8) | next: ld   b,a; ld   a,(ix+$03); inc  a"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "37A5",
+  "ins": "and  $F0",
+  "ctx": " | prev: ld   (ix+$10),a; ret; ld   a,(ix+$01) | next: rrca; ld   d,a; ld   a,(ix+$03)"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "380C",
+  "ins": "and  $F0",
+  "ctx": " | prev: ld   hl,$0000; exx; ld   a,(ix+$01) | next: ld   d,a; ld   a,(ix+$03); inc  a"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "3819",
+  "ins": "and  $F0",
+  "ctx": " | prev: and  $F0; ld   e,a; ld   a,($E1C6) | next: ld   b,a; ld   a,($E1C8); and  $F0"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "382C",
+  "ins": "add  a,$10",
+  "ctx": " | prev: jr   c,$3831; call $3851; ld   a,d | next: ld   d,a; jr   $3823; call $3851"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "3835",
+  "ins": "sub  $10",
+  "ctx": " | prev: jr   $3823; call $3851; ld   a,d | next: ld   d,a; jr   $3823; ld   a,c"
+ },
+ {
+  "kind": "A ld hi,imm",
+  "pc": "3A82",
+  "ins": "ld   b,$90",
+  "ctx": ""
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "3F55",
+  "ins": "and  $FE",
+  "ctx": " | prev: ret; ld   a,(ix+$01); inc  a | next: rrca; ld   d,a; ld   a,(ix+$03)"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "3F64",
+  "ins": "and  $FE",
+  "ctx": " | prev: rrca; ld   e,a; ld   a,($E1C6) | next: rrca; sub  d; ld   h,a"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "4067",
+  "ins": "sub  $07",
+  "ctx": " | prev: ld   bc,$0E07; ret; ld   a,d | next: ld   d,a; ld   bc,$070E; ret"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "406F",
+  "ins": "add  a,$07",
+  "ctx": " | prev: ld   bc,$070E; ret; ld   a,d | next: ld   d,a; ld   bc,$070E; ret"
+ },
+ {
+  "kind": "C cmp hi",
+  "pc": "4125",
+  "ins": "cp   $D8",
+  "ctx": " | prev: ld   e,(iy+$03); ld   a,d"
+ },
+ {
+  "kind": "C cmp hi",
+  "pc": "4529",
+  "ins": "cp   $E1",
+  "ctx": " | prev: ld   (ix+$04),l; ld   a,h"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "480F",
+  "ins": "or   $80",
+  "ctx": " | prev: ld   (ix+$05),$20; ld   a,(ix+$00); and  $03 | next: ld   b,a; ld   c,(ix+$01); ld   d,(ix+$03)"
+ },
+ {
+  "kind": "C cmp hi",
+  "pc": "4C05",
+  "ins": "cp   $E1",
+  "ctx": " | prev: ld   (ix+$04),l; ld   a,h"
+ },
+ {
+  "kind": "C cmp hi",
+  "pc": "4EA8",
+  "ins": "cp   $98",
+  "ctx": " | prev: jr   nz,$4EAF; ld   a,b"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "507D",
+  "ins": "add  a,$10",
+  "ctx": " | prev: pop  bc; inc  b; ld   a,d | next: ld   d,a; call $029D; pop  hl"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "51D4",
+  "ins": "add  a,$10",
+  "ctx": " | prev: call $029D; pop  de; ld   a,d | next: ld   d,a; ld   b,$72; ld   c,$0A"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "51FD",
+  "ins": "and  $F8",
+  "ctx": " | prev: set  7,(ix+$05); ld   a,(ix+$01); add  a,$04 | next: ld   d,a; ld   a,(ix+$03); add  a,$07"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "526C",
+  "ins": "and  $F8",
+  "ctx": " | prev: call $39EC; ld   a,(ix+$01); add  a,$04 | next: ld   d,a; and  $08; ret  z"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "53BA",
+  "ins": "add  a,$06",
+  "ctx": " | prev: pop  de; jr   c,$5406; ld   a,d | next: ld   d,a; push de; call $540B"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "53C5",
+  "ins": "sub  $0D",
+  "ctx": " | prev: pop  de; jr   c,$53ED; ld   a,d | next: ld   d,a; push de; call $540B"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "53D5",
+  "ins": "add  a,$0F",
+  "ctx": " | prev: ld   (ix+$00),$B0; ret; ld   a,d | next: ld   d,a; push de; call $540B"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "53EE",
+  "ins": "sub  $0E",
+  "ctx": " | prev: ld   (ix+$00),$A8; ret; ld   a,d | next: ld   d,a; push de; call $540B"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "54E0",
+  "ins": "add  a,$10",
+  "ctx": " | prev: pop  de; pop  bc; ld   a,d | next: ld   d,a; ld   b,$72; call $029D"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "5C1F",
+  "ins": "or   $80",
+  "ctx": " | prev: add  a,a; add  a,a; add  a,a | next: ld   d,a; ld   a,(iy+$00); and  $38"
+ },
+ {
+  "kind": "B hi arith",
+  "pc": "7C33",
+  "ins": "adc  a,$00",
+  "ctx": " | prev: daa; ld   l,a; ld   a,h | next: daa; ld   h,a; ret"
+ },
+ {
+  "kind": "A ld hi,imm",
+  "pc": "7C6A",
+  "ins": "ld   d,$D0",
+  "ctx": ""
+ }
+]
