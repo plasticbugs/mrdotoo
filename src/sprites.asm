@@ -42,8 +42,9 @@ sprites_init:
 ;  * no band holds five or more: the list goes out as is (order is
 ;    irrelevant when no line overflows);
 ;  * otherwise pinned sprites (Mr. Do) first, then the ones in uncrowded
-;    bands, then the crowded ones rotated three places per frame so every
-;    sprite on a busy row gets its turn (tools/flicker_sim.py).
+;    bands, then the crowded ones rotated three places per frame, in
+;    reverse order every other pass, so every sprite on a busy row gets its
+;    turn (tools/flicker_sim.py) and none drops out for several frames.
 ; The arcade copies its queue to the front of sprite RAM and zeroes Y in every
 ; slot after it, so the scan stops at the first empty slot.
 ;
@@ -64,7 +65,10 @@ sprites_update:
         jr nz, .new
         ld a, (spr_new)
         or a
-        ret z
+        jr nz, .new
+        ld a, (crowd_last)      ; a crowded screen rotates every vblank even
+        or a                    ; when the arcade lags (else a sprite on a
+        ret z                   ; hidden turn stayed hidden for the stall)
 .new:   ld a, (cam)
         ld (spr_cam), a
         xor a
@@ -235,9 +239,11 @@ sprites_update:
         ld b, BANDS
 .cr:    ld a, (hl)
         cp 5
-        jp nc, sprites_prio
+        jp nc, .crowded
         inc l
         djnz .cr
+        xor a
+        ld (crowd_last), a
         call sat_begin          ; no: Mr. Do's overlays, then the list as is
         ld a, (sat_n)           ; (at most 32 entries in all)
         neg
@@ -414,6 +420,10 @@ spr_pin:
         pop af
         ret
 
+sprites_update.crowded:
+        ld a, 1
+        ld (crowd_last), a
+        ; fall through
 ; A crowded frame: pinned first, uncrowded next, the crowded ones rotated.
 sprites_prio:
         call sat_begin          ; 0: Mr. Do's overlays
@@ -488,6 +498,24 @@ sprites_prio:
         jr .mod
 .rok:   ld (crowd_rot), a
         ld c, a
+        ld a, (crowd_dir)       ; every other pass the other way round: with
+        xor 1                   ; only rotation, a count that is a multiple
+        ld (crowd_dir), a       ; of 3 kept a sprite in the same places for
+        jr z, .rot              ; a while (an apple gone for several frames);
+.bk:    ld a, c                 ; reversed, whatever came last comes first
+        or a
+        jr nz, .bd
+        ld a, (crowd_n)
+.bd:    dec a
+        ld c, a
+        add a, low crowd_idx
+        ld l, a
+        ld h, high crowd_idx
+        ld l, (hl)
+        ld h, high spr_list
+        call spr_out4
+        djnz .bk
+        jp spr_term
 .rot:   ld a, c
         add a, low crowd_idx
         ld l, a
