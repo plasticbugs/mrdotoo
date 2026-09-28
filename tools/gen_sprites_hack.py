@@ -58,7 +58,7 @@ from mrdo_gfx import Canvas, build_palette, decode_chars, decode_sprites, load_a
 from mrdo_sprites import msx_sprite, sprite_rgb  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gen_sprites import BLACK, tms_sprite_bytes, usual_lines  # noqa: E402
+from gen_sprites import BLACK, SCORE_CODES, tms_sprite_bytes, usual_lines  # noqa: E402
 from gen_tiles import TMS, tms_index  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -408,11 +408,13 @@ def arcade_conversion():
     for code in range(128):
         pens = tms_line[usual.get(code, 0)]
         solid = {p for p in (1, 2, 3) if pens[p] != BLACK} or {1, 2, 3}
+        if code in SCORE_CODES:         # score ovals: digits cut out
+            solid = {3}
         for fl in range(4):
             art = msx_sprite(sprites[code], fl & 1, fl >> 1)
             masks.append([[1 if art[y][x] in solid else 0 for x in range(16)] for y in range(16)])
         art = msx_sprite(sprites[code])
-        counts = Counter(p for row in art for p in row if p)
+        counts = Counter(p for row in art for p in row if p and (code not in SCORE_CODES or p == 2))
         for ln in range(16):
             best = [tms_line[ln][p] for p, n in counts.most_common() if tms_line[ln][p] != BLACK]
             col.append(best[0] if best else 15)

@@ -34,6 +34,11 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "build" / "sprites"
 BLACK = 1
 MR_DO_CODES = set(range(0x00, 0x27))   # walk, dig, push, throw, caught, death ($00-$26)
+# Score ovals (kill / dessert values, left and right halves, always colour
+# line $0A: black oval, white digits): pen 3 is the oval, pen 2 the digits.
+# One colour cannot show both, so the oval is drawn solid in the digits'
+# colour (white) with the digits cut out, showing the playfield through.
+SCORE_CODES = set(range(0x72, 0x78))
 
 
 def usual_lines():
@@ -87,6 +92,8 @@ def main():
         solid = {p for p in (1, 2, 3) if pens[p] != BLACK}
         if not solid:
             solid = {1, 2, 3}
+        if code in SCORE_CODES:
+            solid = {3}
         for flips in range(4):
             art = msx_sprite(sprites[code], flips & 1, flips >> 1)
             mask = [[art[y][x] in solid for x in range(16)] for y in range(16)]
@@ -94,7 +101,7 @@ def main():
             if flips == 0:
                 shapes.append((mask, art))
         art = shapes[-1][1]
-        counts = Counter(p for row in art for p in row if p)
+        counts = Counter(p for row in art for p in row if p and (code not in SCORE_CODES or p == 2))
         for ln in range(16):
             best = [(n, tms_line[ln][p]) for p, n in counts.most_common()
                     if tms_line[ln][p] != BLACK]
