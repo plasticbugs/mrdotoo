@@ -35,7 +35,9 @@ ROM = (DIS / "mrdo_main.bin").read_bytes()
 
 USE_HACK_CHERRIES = False   # the CV romhack's cherry art instead of the arcade's
 MAX = 224
-SCORE_BASE = 163            # codes 163-175: the dessert score bg tiles $15-$21 (attr 9)
+SCORE_BASE = 163            # 163: the dessert score's "00"; 164: its other half (loaded)
+APPLE_BASE = 172            # codes 172-175: a resting apple over dirt (src/apples.asm)
+DIRT_FG = 0x77              # the fg tile of undug dirt cells
 SCORE_TILES = range(0x15, 0x22)
 SCORE_ATTR = 0x09
 DESSERT_BASE = 176          # codes 176-223: the 48 dessert plate tiles
@@ -115,11 +117,29 @@ def to_screen2(cell):
     return bytes(pat), bytes(col)
 
 
+def screen2_pixels(pat, col):
+    """(8 pattern, 8 colour bytes) -> 8x8 TMS colour indices."""
+    return [[(col[y] >> 4) if (pat[y] >> (7 - x)) & 1 else (col[y] & 15) for x in range(8)]
+            for y in range(8)]
+
+
+def apple_sprite():
+    """The resting apple sprite as drawn: 16x16 mask (player view) and its TMS
+    colour (build/sprites: code $5E, flip 0, colour line 5)."""
+    pat = (ROOT / "build" / "sprites" / "pat.bin").read_bytes()
+    col = (ROOT / "build" / "sprites" / "col.bin").read_bytes()
+    b = pat[0x5E * 4 * 32:0x5E * 4 * 32 + 32]
+    mask = [[(b[y] if x < 8 else b[16 + y]) >> (7 - x % 8) & 1 for x in range(16)] for y in range(16)]
+    return mask, col[0x5E * 16 + 5]
+
+
 def main():
     gfx1, gfx2, _, proms = load_all()
     fgt, bgt = decode_chars(gfx1), decode_chars(gfx2)
     pal = build_palette(proms)
     cways = [(ROM[0x06E6 + i * 2], ROM[0x06E7 + i * 2]) for i in range(31)]
+    global apple_mask, APPLE_COLOUR
+    apple_mask, APPLE_COLOUR = apple_sprite()
 
     # The CV romhack's cherry art (tools/gen_sprites_hack.py): 4 tiles in the
     # order $78-$7B, 8 pattern + 8 colour bytes each, already in the player's
@@ -197,16 +217,32 @@ def main():
         used.append(len(pats))
         assert len(pats) <= 161, "codes 161-162 are the HUD's (tools/gen_hud.py HUD_EXTRA)"
         # The dessert's score (arcade $30FD): bg tile $16 + food ("10" ...
-        # "80") and $15 ("00"), attribute 9, in the plate's left cells. Fixed
-        # codes SCORE_BASE + tile - $15 (src/render.asm not_dirt).
+        # "80") and $15 ("00"), attribute 9, in the plate's left cells. "00"
+        # has code SCORE_BASE; the other half is loaded into SCORE_BASE + 1
+        # at pickup from score.bin (the same in every colourway; src/hud.asm
+        # score_load). SCORE_BASE + 2..8 are the HUD's (tools/gen_hud.py).
         assert len(pats) <= SCORE_BASE, f"colourway {dirt_pair}: {len(pats)} codes > {SCORE_BASE}"
         while len(pats) < SCORE_BASE:
             pats.append(bytes(8))
             cols.append(bytes([0x11] * 8))
-        for t in SCORE_TILES:
-            p_, c_ = compose((SCORE_ATTR, t), BLANK[1], 0)
-            pats.append(p_)
-            cols.append(c_)
+        p_, c_ = compose((SCORE_ATTR, SCORE_TILES[0]), BLANK[1], 0)
+        pats.append(p_)
+        cols.append(c_)
+        while len(pats) < APPLE_BASE:
+            pats.append(bytes(8))
+            cols.append(bytes([0x11] * 8))
+        # A resting apple over plain dirt as 4 background tiles (src/apples.asm):
+        # the apple sprite's own pixels (code $5E, flip 0, its colour line 5)
+        # over this colourway's dirt tile, so the handover to and from the
+        # sprite shows no change. Order TL, TR, BL, BR.
+        dirt_px = screen2_pixels(*compose(dirt_pair, DIRT_FG, 0))   # (as drawn: TBLA[$77])
+        for qy in (0, 1):
+            for qx in (0, 1):
+                cell = [[APPLE_COLOUR if apple_mask[qy * 8 + y][qx * 8 + x] else dirt_px[y][x]
+                         for x in range(8)] for y in range(8)]
+                p_, c_ = to_screen2(cell)
+                pats.append(p_)
+                cols.append(c_)
         assert len(pats) == DESSERT_BASE
         # Foods with romhack art use its full-colour 2x2 tiles, and their
         # sprite is left empty (tools/gen_sprites_hack.py): the arcade's plate
@@ -236,6 +272,10 @@ def main():
         tblb_all += tblb
         dirt += bytes(dirt_pair)
     (OUT / "sets.bin").write_bytes(sets)
+    # the dessert score's other halves ("10"-"80", tiles $16-$21): 12 x (8
+    # pattern + 8 colour bytes), the same over every colourway (src/hud.asm)
+    (OUT / "score.bin").write_bytes(b"".join(p + c for p, c in
+                                             (compose((SCORE_ATTR, t), BLANK[1], 0) for t in SCORE_TILES[1:])))
     (OUT / "tbla.bin").write_bytes(tbla_all)
     (OUT / "tblb.bin").write_bytes(tblb_all)
     (OUT / "dirt.bin").write_bytes(dirt)

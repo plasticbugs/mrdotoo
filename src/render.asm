@@ -267,6 +267,7 @@ render_body:
         call logo_tick          ; (the romhack logo's colour bars, if any)
         ld a, (scr_hbank)
 .bank:  call select_bank
+        call apple_sync         ; resting apples as tiles (apples.asm)
         call camera_update
         ld a, (redraw_all)
         or a
@@ -491,6 +492,7 @@ check_colourway:
         ld (cw), a
         ld a, MODE_PLAYFIELD
         ld (mode), a
+        call apple_reset
         ld a, d                 ; set cw: bank SET_BANK0 + cw/4, slot cw%4
         srl a
         srl a
@@ -797,6 +799,8 @@ redraw_rows:
         ld a, (mode)
         cp MODE_SCREEN
         jr z, .scr
+        ld a, (rd_row)          ; (a tiled apple on this row?)
+        call apple_row
         call draw_run
         jr .rowdone
 .scr:   ld a, (rd_row)
@@ -853,6 +857,9 @@ in_band:
 ; HL = bg-tile address of the first cell; draws 24 cells down the native
 ; column (= across the screen row) to the current VRAM position.
 draw_run:
+        ld a, (apl_rowany)
+        or a
+        jr nz, draw_run_apl
         ld a, (dirt_tile)
         ld c, a
         ld b, 24
@@ -865,6 +872,41 @@ draw_run:
         jr c, .out
 .dirt:  ld a, h
         add a, 8                ; fg tile layer is $800 above the bg tile layer
+        ld h, a
+        ld e, (hl)
+        ld a, (de)
+        ld e, a
+        ld a, h
+        sub 8
+        ld h, a
+        ld a, e
+.out:   out (VDP_DATA), a
+        ld a, l
+        add a, 32
+        ld l, a
+        jr nc, .nc
+        inc h
+.nc:    djnz .cell
+        ret
+
+; The same with a tiled apple on the row (apples.asm).
+draw_run_apl:
+        ld a, (dirt_tile)
+        ld c, a
+        ld b, 24
+.cell:  ld a, 24
+        sub b                   ; screen column
+        call apple_at
+        jr c, .out
+        ld a, (tbl_page)
+        ld d, a
+        ld a, (hl)              ; bg tile
+        cp c
+        jr z, .dirt
+        call not_dirt
+        jr c, .out
+.dirt:  ld a, h
+        add a, 8
         ld h, a
         ld e, (hl)
         ld a, (de)
@@ -1214,7 +1256,25 @@ draw_cell:
         call nc, scr_lookup
         out (VDP_DATA), a
         ret
-.pf:    ld a, (dirt_tile)
+.pf:    ld a, (apl_cur_n)       ; a tiled apple's cell? (apples.asm)
+        or a
+        jr z, .pf2
+        ld a, e                 ; screen row = 31 - column - cam
+        and $1F
+        cpl
+        and $1F
+        ld b, a
+        ld a, (cam)
+        ld d, a
+        ld a, b
+        sub d
+        ld (apl_sy), a
+        ld a, c                 ; screen column
+        call apple_at
+        jr nc, .pf2
+        out (VDP_DATA), a
+        ret
+.pf2:   ld a, (dirt_tile)
         ld c, a
         ld a, (tbl_page)
         ld d, a

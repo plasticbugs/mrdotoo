@@ -353,43 +353,36 @@ hud_scan:
 
 ; The dessert's score (render.asm not_dirt): "00" has code SCORE_BASE, the
 ; other half (tile score_want, "10"-"80") is loaded into SCORE_BASE + 1 from
-; the current set in ROM, which keeps all of them; SCORE_BASE + 2.. are the
-; HUD's (HUD_EXTRA0). Spaced writes. Clobbers everything.
+; score_tiles (tools/gen_tiles.py score.bin: the same over every colourway).
+; Spaced writes. Clobbers everything.
 score_load:
         ld a, (score_want)
         ld (score_have), a
-        sub $15                 ; its code in the set: SCORE_BASE + tile - $15
-        add a, SCORE_BASE
+        sub $16                 ; tile $16-$21 -> 0-11: 16 bytes each
         ld l, a
         ld h, 0
         add hl, hl
         add hl, hl
         add hl, hl
-        ld de, 2
+        add hl, hl
+        ld de, score_tiles
         add hl, de
-        ex de, hl               ; DE = its patterns' offset in the set
-        ld a, (cur_bank)
-        push af
-        ld a, (up_bank)
-        call select_bank
-        push de
+        push hl
         ld hl, VR_PT + (SCORE_BASE + 1) * 8
-        call .copy
-        pop de
-        ld hl, SET_MAX * 8
-        add hl, de
-        ex de, hl
+        call vdp_set_write
+        pop hl
+        call .b8
+        push hl
         ld hl, VR_CT + (SCORE_BASE + 1) * 8
-        call .copy
-        pop af
-        jp select_bank
-.copy:  call vdp_set_write
-        ld hl, (up_set)
-        add hl, de
-        ld b, 8
+        call vdp_set_write
+        pop hl
+.b8:    ld b, 8
 .b:     ld a, (hl)
         out (VDP_DATA), a
         inc hl
         nop
         djnz .b
         ret
+
+score_tiles:
+        incbin "build/tiles/score.bin"

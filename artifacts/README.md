@@ -50,3 +50,4 @@ recordings, one folder per milestone. Files here are committed; `build/` is not.
 - `10-all-cutscenes/diamond_token_on_top.png`: the arcade's dropping credit token, SAT entry 0 over the romhack clown's sprites.
 - `15-hud/hud_two_players.png`: 2-player game: 2ND and its score (the waiting player's score grey, as the arcade dims it).
 - `15-hud/extra_collected_green.png`: collected EXTRA letters light green (user's pick); a marked collected letter green on blue.
+- `18-apple-tiles/`: resting apples drawn as background tiles (out of the sprite budget); the handoff to the wobbling sprite frame by frame; the apple tiles over three levels' dirt.

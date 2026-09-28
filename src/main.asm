@@ -915,6 +915,7 @@ font_len equ $-font
         include "hud.asm"
         include "vgland.asm"
         include "logo.asm"
+        include "apples.asm"
         include "build/screens/logo.inc"
         include "build/tiles/hud.inc"
 

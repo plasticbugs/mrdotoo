@@ -96,7 +96,12 @@ sprites_update:
         xor a
         ld (frag_cnt), a
         ld (pin_n), a
-        ld hl, ARC_SPRITES + 1  ; -> Y of entry 0
+        ld a, (mode)            ; this pass's tiled apples (apples.asm)
+        cp MODE_PLAYFIELD
+        jr nz, .na
+        xor a
+        ld (apl_new_n), a
+.na:    ld hl, ARC_SPRITES + 1  ; -> Y of entry 0
         ld de, spr_list
 .next:  ld a, (hl)              ; Y (0 = end of the queue)
         or a
@@ -141,7 +146,9 @@ sprites_update:
         jr .yok
 .yneg:  cp -15
         jp c, .skip
-.yok:   dec a                   ; the TMS9918 draws one line below Y
+.yok:   call apple_try          ; a resting apple drawn as tiles?
+        jp c, .skip             ; (apples.asm)
+        dec a                   ; the TMS9918 draws one line below Y
         cp SAT_END
         jp z, .skip
         ld (de), a              ; y
