@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Dev-time capture of a non-gameplay screen's tile cells (needs MAME output).
 
-usage: capture_screen.py NAME CAM SPEC [...] [--band R0-R1] [--font] [--not SPEC ...]
+usage: capture_screen.py NAME CAM SPEC [...] [--band R0-R1] [--font] [--cells SPEC ...] [--not SPEC ...]
   SPEC  RECORDING.ram:FIRST-LAST   tools/diff/mame_record.lua recording (8KB per
                                    vblank handler: work RAM, then video RAM)
         scene:PREFIX:FIRST-LAST    tools/capture/scene_record.lua recording
@@ -12,6 +12,9 @@ a signature cell (an fg tile constant over the whole run, unusual elsewhere,
 and never seen at that cell in the --not frames, e.g. other screens that
 share the logo), and writes tools/data/screens/NAME.txt, which
 tools/gen_screens.py turns into a tile set. Commit the .txt.
+
+--cells SPEC ...: more frames whose cells the screen needs, left out of the
+signature search (e.g. an opening that other screens share).
 
 --font: the screen shows text that varies (names, scores): tools/gen_screens.py
 adds every font character in each text colour it uses.
@@ -68,6 +71,8 @@ def main():
     args = sys.argv[3:]
     nots = args[args.index("--not") + 1:] if "--not" in args else []
     args = args[:args.index("--not")] if "--not" in args else args
+    more = args[args.index("--cells") + 1:] if "--cells" in args else []
+    args = args[:args.index("--cells")] if "--cells" in args else args
     font = "--font" in args
     args = [a for a in args if a != "--font"]
     band = None
@@ -79,6 +84,10 @@ def main():
     frames = []
     for spec in specs:
         frames += load(spec)
+    extra_frames = []
+    for spec in more:
+        extra_frames += [(v, y, True) for v, y in load(spec)]
+    frames = [(v, y, False) for v, y in frames] + extra_frames
     seen_elsewhere = set()
     for spec in nots:
         for v, _ in load(spec):
@@ -86,7 +95,7 @@ def main():
 
     combos, pairs = Counter(), Counter()
     const = None
-    for v, scroll in frames:
+    for v, scroll, cells_only in frames:
         cells = {}
         for row in range(cam, cam + 24):
             c = 31 - row
@@ -107,7 +116,8 @@ def main():
                 k = (v[o], v[0x400 + o], v[0x800 + o], v[0xC00 + o])
                 combos[k] += 1
                 cells[o] = v[0xC00 + o]
-        const = cells if const is None else {o: t for o, t in const.items() if cells.get(o) == t}
+        if not cells_only:
+            const = cells if const is None else {o: t for o, t in const.items() if cells.get(o) == t}
     # signature: a constant fg tile that is not blank, dirt, tunnel or font
     const = {o: t for o, t in const.items() if (o, t) not in seen_elsewhere}
     cand = [(o, t) for o, t in const.items() if t >= 0xC0 or 0x40 <= t < 0x72]

@@ -757,6 +757,25 @@ scr_lookup:
         ld (hl), d
         inc l
         ld (hl), e
+        call scr_find
+        jr c, .done
+        push de                 ; never seen in the capture (the scene's
+        ld de, $0000 + BLANK_BG ; details can differ from it): the cell's
+        call scr_find           ; background alone, then its foreground
+        pop de                  ; alone, then black
+        jr c, .done
+        push bc
+        ld bc, $0000 + BLANK_BG
+        call scr_find
+        pop bc
+        jr c, .done
+        xor a
+.done:  ld (scr_last + 4), a
+        ret
+
+; B, C, D, E = bg attr, bg tile, fg attr, fg tile -> carry and A = the code
+; if the screen's hash has the cell. Preserves BC, DE.
+scr_find:
         ld a, d                 ; h = (fg tile + 4*(fg attr ^ bg tile ^ bg attr)) & 1023
         xor c
         xor b
@@ -799,7 +818,7 @@ scr_lookup:
         add a, h
         ld h, a
         ld a, (hl)
-        ld (scr_last + 4), a
+        scf
         ret
 .miss:  pop hl
         push hl
@@ -816,8 +835,7 @@ scr_lookup:
         and 3
         ld h, a
         jr .probe
-.none:  xor a
-        ld (scr_last + 4), a
+.none:  or a
         ret
 
 ; A non-dirt cell. HL -> its bg tile, A = the bg tile, D = TBLA page.

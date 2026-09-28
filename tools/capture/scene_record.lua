@@ -3,7 +3,10 @@
 -- $E000-$EFFF; log scroll writes to PREFIX.scroll.
 -- Env: OUT (prefix), FRAMES, SCEN (attract|vg|w|dia|ext|over), POKEF (frame of
 --      the poke that ends the round into the scene), LETTER (0-4: the EXTRA
---      letter the alpha monster wears, $E017), SNAPEVERY, SNAPFROM, SNAPTO
+--      letter the alpha monster wears, $E017), SNAPEVERY, SNAPFROM, SNAPTO,
+--      EXECOUT (file: every instruction address executed, for the code map),
+--      DATAOUT (file, JSON {reader pc: [ROM addresses]} like
+--      tools/profile/sweep/rom_data_reads.json)
 -- Run MAME with SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy -video none -sound none.
 local cpu = manager.machine.devices[":maincpu"]
 local mem = cpu.spaces["program"]
@@ -32,6 +35,8 @@ local function setf(name, v)
   want_p1 = want_p1 & 0xFF; want_p2 = want_p2 & 0xFF
 end
 local taps = {}
+exec = {}
+dreads = {}
 local spr
 local function install()
   spr = manager.machine.memory.shares[":spriteram"]
@@ -39,6 +44,17 @@ local function install()
     slog:write(string.format("%d %04x %02x %04x\n", f, off, data & 0xFF, cpu.state["CURPC"].value))
     return data
   end)
+  if os.getenv("EXECOUT") or os.getenv("DATAOUT") then
+    local curpc = cpu.state["CURPC"]
+    taps[3] = mem:install_read_tap(0x0000, 0x7FFF, "exec", function(off, data, mask)
+      local pc = curpc.value
+      if off == pc then exec[off] = true
+      elseif off - pc < 0 or off - pc > 3 then
+        local t = dreads[pc]; if not t then t = {}; dreads[pc] = t end
+        t[off] = true
+      end
+    end)
+  end
   taps[2] = mem:install_read_tap(0xA000, 0xA001, "inp", function(off, data, mask)
     if off == 0xA000 then data = (data & 0xFF00) | want_p1 end
     if off == 0xA001 then data = (data & 0xFF00) | want_p2 end
@@ -67,6 +83,22 @@ emu.register_frame_done(function()
     slog:write(string.format("SNAP %d\n", f))
   end
   if f >= maxf then
+    if os.getenv("EXECOUT") then
+      local xf = io.open(os.getenv("EXECOUT"), "w")
+      for a in pairs(exec) do xf:write(string.format("%04x\n", a)) end
+      xf:close()
+    end
+    if os.getenv("DATAOUT") then
+      local xf = io.open(os.getenv("DATAOUT"), "w")
+      local parts = {}
+      for pc, t in pairs(dreads) do
+        local as = {}
+        for a in pairs(t) do as[#as + 1] = tostring(a) end
+        parts[#parts + 1] = string.format('"%04X": [%s]', pc, table.concat(as, ","))
+      end
+      xf:write("{" .. table.concat(parts, ",\n") .. "}\n")
+      xf:close()
+    end
     rec:close(); slog:close(); done = true
     manager.machine:exit(); return
   end

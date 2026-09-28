@@ -49,9 +49,10 @@ BAND_SLOTS = 70                 # tiles per band build (the VERY GOOD scene peak
 PAIR_MAX = (BANK_USE - 0x1000) // 64    # pairs per scene (one bank)
 BLANK = 0x29
 FONT_TILES = range(0x30)        # 0-9, A-Z and punctuation
-# Order matters: the first signature match wins, and the title's logo is on the
-# instruction screen too.
-SCREENS = ["instruction", "title", "verygood", "hiscore", "wonderful"]
+# Order matters: the first signature match wins. The title's logo is on the
+# instruction screen too, and congrats (the CONGRATULATIONS opening the diamond
+# and EXTRA scenes share) stays on screen under both.
+SCREENS = ["instruction", "title", "verygood", "hiscore", "wonderful", "diamond", "extra", "congrats"]
 # INDEX entry (16 bytes): sig cell (2), sig fg tile, cam, set bank, set address
 # (2), hash bank, hash page, band first screen row, band rows, pair hash bank
 # (0 = no band), slot base (= static tile count), 3 spare

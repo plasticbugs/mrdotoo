@@ -62,6 +62,16 @@ local function install()
   taps[5] = mem:install_read_tap(0xE001, 0xE001, "hstart", function(off, data, mask)
     if cpu.state["CURPC"].value == 0x00C4 then
       local it = tonumber(os.getenv("ITRACE") or "-1")
+      -- SCEN (vg|w|dia|ext) + POKEH=h: end the round into that scene at the
+      -- start of handler h (tools/diff/cv_replay.tcl does the same)
+      if os.getenv("SCEN") and n == tonumber(os.getenv("POKEH") or "-1") then
+        local sc = os.getenv("SCEN")
+        local lv = ({vg=0x03, w=0x10, dia=0x01, ext=0x01})[sc]
+        local why = ({vg=2, w=2, dia=3, ext=4})[sc]
+        local fl = ({vg=0x80, w=0x80, dia=0xA0, ext=0x88})[sc]
+        mem:write_u8(0xE09B, lv); mem:write_u8(0xE0C7, why)
+        mem:write_u8(0xE1B6, mem:read_u8(0xE1B6) | fl)
+      end
 
       cur_p1, cur_p2 = want_p1, want_p2
     end
@@ -90,7 +100,9 @@ local function install()
   if w then
     local wa = tonumber(w, 16)
     taps[3] = mem:install_write_tap(wa, wa, "watch", function(off, data, mask)
-      print(string.format("WATCH h=%d pc=%04x %04x<-%02x", n, cpu.state["CURPC"].value, off, data & 0xFF))
+      local sp = cpu.state["SP"].value
+      print(string.format("WATCH h=%d pc=%04x %04x<-%02x (sp) %04x %04x", n, cpu.state["CURPC"].value, off, data & 0xFF,
+        mem:read_u16(sp), mem:read_u16(sp + 2)))
       return data
     end)
   end
