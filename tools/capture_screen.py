@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Dev-time capture of a non-gameplay screen's tile cells (needs MAME output).
 
-usage: capture_screen.py NAME CAM SPEC [...] [--band R0-R1] [--not SPEC ...]
+usage: capture_screen.py NAME CAM SPEC [...] [--band R0-R1] [--font] [--not SPEC ...]
   SPEC  RECORDING.ram:FIRST-LAST   tools/diff/mame_record.lua recording (8KB per
                                    vblank handler: work RAM, then video RAM)
         scene:PREFIX:FIRST-LAST    tools/capture/scene_record.lua recording
@@ -12,6 +12,9 @@ a signature cell (an fg tile constant over the whole run, unusual elsewhere,
 and never seen at that cell in the --not frames, e.g. other screens that
 share the logo), and writes tools/data/screens/NAME.txt, which
 tools/gen_screens.py turns into a tile set. Commit the .txt.
+
+--font: the screen shows text that varies (names, scores): tools/gen_screens.py
+adds every font character in each text colour it uses.
 
 --band R0-R1: player rows R0..R1 hold background art that the arcade scrolls
 (the cutscenes' characters; bg scroll register $F800, pixels along the
@@ -65,6 +68,8 @@ def main():
     args = sys.argv[3:]
     nots = args[args.index("--not") + 1:] if "--not" in args else []
     args = args[:args.index("--not")] if "--not" in args else args
+    font = "--font" in args
+    args = [a for a in args if a != "--font"]
     band = None
     if "--band" in args:
         i = args.index("--band")
@@ -113,6 +118,8 @@ def main():
     lines = [f"# {name}: captured from {' '.join(Path(a).name for a in specs)}"
              + (f" (signature unseen in {' '.join(Path(a).name for a in nots)})" if nots else ""),
              f"cam {cam}", f"sig {sig[0]:03x} {sig[1]:02x}"]
+    if font:
+        lines.append("font")
     if band:
         lines.append(f"band {band[0]} {band[1]}")
         lines += [f"pair {a:02x} {b:02x} {c:02x} {e:02x} {n}" for (a, b, c, e), n in pairs.most_common()]

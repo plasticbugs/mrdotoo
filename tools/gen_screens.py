@@ -51,7 +51,7 @@ BLANK = 0x29
 FONT_TILES = range(0x30)        # 0-9, A-Z and punctuation
 # Order matters: the first signature match wins, and the title's logo is on the
 # instruction screen too.
-SCREENS = ["instruction", "title", "verygood"]
+SCREENS = ["instruction", "title", "verygood", "hiscore", "wonderful"]
 # INDEX entry (16 bytes): sig cell (2), sig fg tile, cam, set bank, set address
 # (2), hash bank, hash page, band first screen row, band rows, pair hash bank
 # (0 = no band), slot base (= static tile count), 3 spare
@@ -60,6 +60,7 @@ INDEX = 16
 
 def load(name):
     cam, sig, band, cells, pairs = None, None, None, Counter(), Counter()
+    font = False
     for line in (HERE / "data" / "screens" / f"{name}.txt").read_text().splitlines():
         if not line or line[0] == "#":
             continue
@@ -68,13 +69,15 @@ def load(name):
             cam = int(f[1])
         elif f[0] == "sig":
             sig = (int(f[1], 16), int(f[2], 16))
+        elif f[0] == "font":
+            font = True
         elif f[0] == "band":
             band = (int(f[1]), int(f[2]))
         elif f[0] == "pair":
             pairs[tuple(int(x, 16) for x in f[1:5])] += int(f[5])
         else:
             cells[tuple(int(x, 16) for x in f[:4])] += int(f[4])
-    return cam, sig, band, cells, pairs
+    return cam, sig, band, cells, pairs, font or band is not None
 
 
 def hkey(k):
@@ -160,12 +163,17 @@ def main():
     banks = Banks()
     entries, sets, hashes = [], [], []
     for name in SCREENS:
-        cam, sig, band, cells, pairs = load(name)
+        cam, sig, band, cells, pairs, font = load(name)
         room = min(SCREEN_MAX, 256 - 2 * BAND_SLOTS) if band else SCREEN_MAX   # slots may use 224-255
-        if band:                    # every font character in each text colour
-            for attr in {k[2] for k in list(cells) if k[3] in FONT_TILES}:
-                for t in FONT_TILES:
-                    cells[(0, BLANK, attr, t)] += 0
+        if font:                    # every font character in each colour used
+            chars = {}              # for varying text (6+ different characters;
+            for k in cells:         # one-off labels such as "5TH" stay as seen)
+                if k[3] in FONT_TILES:
+                    chars.setdefault(k[2], set()).add(k[3])
+            for attr, seen in chars.items():
+                if len(seen) >= 6:
+                    for t in FONT_TILES:
+                        cells[(0, BLANK, attr, t)] += 0
         tile_of = {k: compose(k) for k in cells}
         weight = Counter()
         for k, n in cells.items():
