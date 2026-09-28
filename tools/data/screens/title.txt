@@ -2,6 +2,8 @@
 cam 3
 sig 2f8 71
 logo 1 8 2 21
+# every white font character (credits, "1 OR 2 PLAYERS BUTTON" with 2+ credits); kept by hand: re-add after a recapture
+fontattr 09
 00 29 00 29 324930
 40 29 40 29 16310
 66 27 40 29 5054
