@@ -574,13 +574,14 @@ vgl_icon:
         cpl
         sub 31
         jr c, .no
-        cp 240
-        jr nc, .no
+        cp 232
+        jr nc, .no              ; (cols +1, +2 must fit)
         rrca
         rrca
         rrca
         and $1F
-        ld e, a
+        inc a                   ; one column right of the arcade's place (the
+        ld e, a                 ; tiles are wider than its 16px sprite, user)
         inc l
         inc l
         ld a, (cam)             ; X: screen y = 240 - cam * 8 - X
