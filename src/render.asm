@@ -235,7 +235,10 @@ render_body:
         jr z, .nospr
         ld a, (vgl_on)          ; (the VERY GOOD picture has its own sprites)
         or a
-        call z, sprites_update  ; first, inside vblank
+        jr nz, .nospr
+        ld a, (logo_on)         ; (so has the romhack clown)
+        cp 2
+        call nz, sprites_update ; first, inside vblank
 .nospr:
         call late_ack
         call check_colourway

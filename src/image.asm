@@ -335,6 +335,7 @@ img_pan:
 ; clear both name tables and the sprites, and leave the display blanked.
 leave_image:
         call vgl_leave
+        call clown_leave
         ld a, (mode)
         cp MODE_IMAGE
         ret nz

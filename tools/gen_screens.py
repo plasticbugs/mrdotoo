@@ -72,7 +72,9 @@ def load(name):
         if not line or line[0] == "#":
             continue
         f = line.split()
-        if f[0] == "logo":              # the romhack's logo at these screen
+        if f[0] == "overlay":           # the romhack's clown and diamond
+            logo = ("clown",) + tuple(int(x) for x in f[1:5])
+        elif f[0] == "logo":              # the romhack's logo at these screen
             logo = tuple(int(x) for x in f[1:5])        # rows/columns
         elif f[0] == "fontattr":          # every font character in these fg
             fontattr |= {int(x, 16) for x in f[1:]}     # attributes
@@ -121,6 +123,56 @@ def romhack_logo():
     names = bytes(base + uniq.index(t) for t in block)
     frames = b"".join(bytes(cf[f * 64 + t // 8] for t in uniq) for f in range(12))
     return {"base": base, "tiles": tiles, "blob": names + frames}
+
+
+# The CV romhack's special (diamond) scene (mrdo_core.asm CONGRATULATION):
+# its clown (7 x 10 tiles) over its diamond (4 x 3, three frames), 10 clown
+# sprites and 5 sparkle sprites per diamond frame, a frame every 8 vblanks.
+# Drawn over our diamond screen's box CLOWN_AT (the same layout, 4 rows down
+# and 1 column right of the romhack's).
+CLOWN_AT = (4, 16, 1, 8)        # screen rows, columns
+CLOWN_DY, CLOWN_DX = 32, 8      # romhack -> our screen, pixels
+
+
+def romhack_clown():
+    """-> dict(base, tiles, blob): blob (src/logo.asm) = 3 frames x 13 x 8
+    names, then 3 x 61 bytes of SAT (15 sprites + $D0), then the sprite
+    patterns (25 16x16 sprites, 800 bytes)."""
+    import gen_sprites_hack as H
+    sys.path.insert(0, str(HERE))
+    from gen_images import db_exprs
+    ch = H.pletter(H.db_block(H.CORE, "congratulation_char"))
+    co = H.pletter(H.db_block(H.CORE, "congratulation_color"))
+    spt = H.pletter(H.db_block(H.CORE, "congratulation_sprites"))
+    pat = db_exprs(H.CORE, "cvb_congratulation_pattern")
+    frc = [db_exprs(H.CORE, f"cvb_FRC{k}") for k in range(3)]
+    fsb = db_exprs(H.CORE, "cvb_FSB")
+    fs = [db_exprs(H.CORE, f"cvb_FS{k}") for k in range(3)]
+    assert len(pat) == 70 and all(len(f) == 12 for f in frc) and len(fsb) == 41
+    frames = []
+    for k in range(3):
+        box = [[0] * 8 for _ in range(13)]
+        for r in range(10):
+            for c in range(7):
+                box[r][c + 1] = pat[r * 7 + c]
+        for r in range(3):
+            for c in range(4):
+                box[10 + r][c] = frc[k][r * 4 + c]
+        frames.append(box)
+    uniq = sorted({t for f in frames for row in f for t in row} - {0})
+    base = SCREEN_MAX - len(uniq)
+    tiles = [(bytes(ch[t * 8:t * 8 + 8]), bytes(co[t * 8:t * 8 + 8])) for t in uniq]
+    names = b"".join(bytes(0 if t == 0 else base + uniq.index(t) for row in f for t in row)
+                     for f in frames)
+    sats = b""
+    for k in range(3):
+        sat = bytearray()
+        for e in [fsb[i * 4:i * 4 + 4] for i in range(10)] + [fs[k][i * 4:i * 4 + 4] for i in range(5)]:
+            y, x, n, c = e
+            sat += bytes([(y + CLOWN_DY) & 0xFF, (x + CLOWN_DX) & 0xFF, n, c])
+        sats += bytes(sat) + b"\xd0"
+    assert len(spt) >= 800
+    return {"base": base, "tiles": tiles, "blob": names + sats + bytes(spt[:800])}
 
 
 def hkey(k):
@@ -204,13 +256,20 @@ def main():
 
     OUT.mkdir(parents=True, exist_ok=True)
     lg = romhack_logo()
+    cl = romhack_clown()
     banks = Banks()
     entries, sets, hashes = [], [], []
     for name in SCREENS:
         cam, sig, band, cells, pairs, font, logo = load(name)
         room = min(SCREEN_MAX, 256 - 2 * BAND_SLOTS) if band else SCREEN_MAX   # slots may use 224-255
-        if logo:
+        ov = None
+        if logo and logo[0] == "clown":
+            assert logo[1:] == CLOWN_AT, f"{name}: overlay at {logo[1:]}, src/logo.asm expects {CLOWN_AT}"
+            ov = cl
+            room = cl["base"]
+        elif logo:
             assert logo == LOGO_AT, f"{name}: logo at {logo}, src/logo.asm expects {LOGO_AT}"
+            ov = lg
             room = lg["base"]
         if font:                    # every font character in each colour used
             chars = {}              # for varying text (6+ different characters;
@@ -243,9 +302,9 @@ def main():
                 h = (h + 1) & (HASH_N - 1)
             keys[h * 4:h * 4 + 4] = bytes(k)
             codes[h] = code[tile_of[k]]
-        if logo:                    # the logo's tiles at their fixed codes
-            pad = [(bytes(8), bytes(8))] * (lg["base"] - len(kept))
-            kept_all = kept + pad + lg["tiles"]
+        if ov:                      # the romhack tiles at their fixed codes
+            pad = [(bytes(8), bytes(8))] * (ov["base"] - len(kept))
+            kept_all = kept + pad + ov["tiles"]
         else:
             kept_all = kept
         blob = bytearray([len(kept_all), 0])
@@ -287,13 +346,15 @@ def main():
         assert not band or 0 <= row0 and row0 + nrows <= 24
         index += bytes([sig[0] & 0xFF, sig[0] >> 8, sig[1], cam, sb, sa & 0xFF, sa >> 8,
                         hb, ha >> 8, row0, nrows, pbank, nkept, IMAGES.get(name, 0),
-                        1 if logo else 0, 0])
+                        (2 if logo[0] == "clown" else 1) if logo else 0, 0])
     data = banks.data()
     (OUT / "banks.bin").write_bytes(data)
     (OUT / "banks.inc").write_text(f"SCR_BANKS equ {len(data) // BANK}\n")
     (OUT / "index.bin").write_bytes(index)
     (OUT / "logo.bin").write_bytes(lg["blob"])
-    (OUT / "logo.inc").write_text(f"LOGO_BASE equ {lg['base']}\nLOGO_N equ {len(lg['tiles'])}\n")
+    (OUT / "logo.inc").write_text(f"LOGO_BASE equ {lg['base']}\nLOGO_N equ {len(lg['tiles'])}\n"
+                                  f"CLOWN_BASE equ {cl['base']}\n")
+    (OUT / "clown.bin").write_bytes(cl["blob"])
     print(f"screens: {len(SCREENS)} in {len(data) // BANK} banks from {SCR_BANK0}")
 
 

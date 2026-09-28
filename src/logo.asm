@@ -25,12 +25,30 @@ logo_old        equ vgl_on + 19 ; the frame before it
 logo_i          equ vgl_on + 20 ; next tile to update ($FF: none)
 logo_pn         equ vgl_on + 21 ; the frame's colour list (2)
 logo_po         equ vgl_on + 23 ; the previous frame's (2)
-        assert logo_po + 1 < $2F00
+clw_fr          equ vgl_on + 25 ; clown: diamond frame (0-2)
+clw_step        equ vgl_on + 26 ;   upload step (6 = running)
+        assert clw_step < $2F00
+
+; The romhack clown and diamond over the diamond screen (index byte 14 = 2;
+; tools/gen_screens.py romhack_clown): box screen rows CLW_R0-, columns
+; CLW_C0- (13 x 8), its names per diamond frame, its sprites (10 for the
+; clown, 5 sparkles per frame) in place of the sprite pass, a frame every 8
+; vblanks.
+CLW_R0          equ 4           ; = tools/gen_screens.py CLOWN_AT
+CLW_C0          equ 1
+CLW_H           equ 13
+CLW_W           equ 8
+CLOWN_NAMES     equ clown_data
+CLOWN_SAT       equ clown_data + 3 * CLW_H * CLW_W
+CLOWN_SPT       equ CLOWN_SAT + 3 * 61
+CLW_CHUNK       equ 200     ; sprite pattern bytes a vblank (4 steps)
 
 ; A new screen (check_screens), A = its index byte 14.
 logo_start:
         ld (logo_on), a
         xor a
+        ld (clw_fr), a
+        ld (clw_step), a
         ld (logo_fr), a
         ld (logo_old), a
         ld a, $FF
@@ -43,6 +61,8 @@ logo_cell:
         ld a, (logo_on)
         or a
         ret z
+        cp 2
+        jr z, clown_cell
         ld a, (mode)
         cp MODE_SCREEN
         jr nz, .no
@@ -82,11 +102,55 @@ logo_cell:
 .no:    or a
         ret
 
-; Each vblank in screen mode (VDP access allowed): the colour bars.
+; Same for the clown box.
+clown_cell:
+        ld a, (mode)
+        cp MODE_SCREEN
+        jr nz, .no
+        ld a, d
+        sub CLW_R0
+        cp CLW_H
+        jr nc, .no
+        push hl
+        push de
+        add a, a                ; row * 8
+        add a, a
+        add a, a
+        ld l, a
+        ld a, e
+        sub CLW_C0
+        cp CLW_W
+        jr nc, .nop
+        add a, l
+        ld l, a
+        ld h, 0
+        ld a, (clw_fr)          ; + frame * 104
+        or a
+        jr z, .f0
+        ld de, CLW_H * CLW_W
+.fm:    add hl, de
+        dec a
+        jr nz, .fm
+.f0:    ld de, CLOWN_NAMES
+        add hl, de
+        ld a, (hl)
+        pop de
+        pop hl
+        scf
+        ret
+.nop:   pop de
+        pop hl
+.no:    or a
+        ret
+
+; Each vblank in screen mode (VDP access allowed): the colour bars, or the
+; clown's sprites and diamond.
 logo_tick:
         ld a, (logo_on)
         or a
         ret z
+        cp 2
+        jp z, clown_tick
         ld a, (up_pending)
         or a
         ret nz                  ; its tile set is not up yet
@@ -162,6 +226,155 @@ logo_tick:
         dec a
         jr nz, .b
         ret
+
+clown_tick:
+        ld a, (up_pending)
+        or a
+        ret nz                  ; its tile set is not up yet
+        ld a, (clw_step)
+        or a
+        jr nz, .s1
+        ld hl, VR_SAT           ; step 0: no sprites while their patterns load
+        call vdp_set_write
+        ld a, SAT_END
+        out (VDP_DATA), a
+        ld a, 1
+        ld (clw_step), a
+        ret
+.s1:    cp 5
+        jr nc, .s5
+        dec a                   ; steps 1-4: 200 bytes of sprite patterns each
+        ld l, a
+        ld h, 0
+        ld de, CLW_CHUNK
+        call clown_sat.mul
+        push hl
+        ld de, VR_SPT
+        add hl, de
+        call vdp_set_write
+        pop hl
+        ld de, CLOWN_SPT
+        add hl, de
+        ld bc, CLW_CHUNK
+.w:     ld a, (hl)              ; 43 T a byte
+        out (VDP_DATA), a
+        inc hl
+        dec bc
+        ld a, b
+        or c
+        jr nz, .w
+        ld hl, clw_step
+        inc (hl)
+        ret
+.s5:    jr nz, .run
+        ld a, 6                 ; step 5: frame 0's sprites
+        ld (clw_step), a
+        jr clown_sat
+.run:   ld a, (frame_cnt)       ; then a frame every 8 vblanks
+        and 7
+        ret nz
+        ld a, (clw_fr)
+        inc a
+        cp 3
+        jr c, .f
+        xor a
+.f:     ld (clw_fr), a
+        ld a, (pnt_front)       ; the box's diamond rows
+        call clown_sat.rows
+        ld a, (pnt_back)
+        call clown_sat.rows
+        ; fall through
+; The current frame's 15 sprites.
+clown_sat:
+        ld hl, VR_SAT
+        call vdp_set_write
+        ld a, (clw_fr)
+        ld l, a
+        ld h, 0
+        ld de, 61
+        call clown_sat.mul
+        ld de, CLOWN_SAT
+        add hl, de
+        ld b, 61
+.s:     ld a, (hl)
+        out (VDP_DATA), a
+        inc hl
+        nop
+        nop
+        djnz .s
+        ret
+; HL = L * DE (L small).
+.mul:   ld a, l
+        ld hl, 0
+        or a
+        ret z
+.m:     add hl, de
+        dec a
+        jr nz, .m
+        ret
+; A = name table high byte: box rows 10-12, columns 0-3 of the frame.
+.rows:  ld b, 10
+.r:     push af
+        push bc
+        ld l, b                 ; screen row CLW_R0 + b, column CLW_C0
+        ld h, 0
+        ld de, CLW_R0
+        add hl, de
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        ld de, CLW_C0
+        add hl, de
+        add a, h
+        ld h, a
+        call vdp_set_write
+        ld d, b
+        ld e, CLW_C0
+        ld a, CLW_R0
+        add a, d
+        ld d, a
+        ld b, 4
+.c:     call clown_cell         ; (the frame's name)
+        out (VDP_DATA), a
+        inc e
+        djnz .c
+        pop bc
+        pop af
+        inc b
+        ld c, a
+        ld a, b
+        cp 13
+        ld a, c
+        jr c, .r
+        ret
+
+; Leaving the clown screen: hide its sprites, give the sprite cache back.
+; Preserves BC, DE, HL.
+clown_leave:
+        ld a, (logo_on)
+        cp 2
+        ret nz
+        xor a
+        ld (logo_on), a
+        push bc
+        push de
+        push hl
+        ld hl, VR_SAT
+        call vdp_set_write
+        ld a, SAT_END
+        out (VDP_DATA), a
+        call sprites_init
+        ld a, $FF
+        ld (spr_cam), a
+        pop hl
+        pop de
+        pop bc
+        ret
+
+clown_data:
+        incbin "build/screens/clown.bin"
 
 logo_data:
         incbin "build/screens/logo.bin"
