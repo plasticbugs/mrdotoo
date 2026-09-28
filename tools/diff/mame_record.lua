@@ -48,6 +48,13 @@ local function install()
     if finished or cpu.state["CURPC"].value ~= 0x00E9 then return data end
     ram:write(mem:read_range(0xE000, 0xEFFF, 8)); ram:write(mem:read_range(0x8000, 0x8FFF, 8))
     n = n + 1
+    -- optional: SNAP=h1,h2,... saves a screenshot at those handlers
+    local snaps = os.getenv("SNAP")
+    if snaps then
+      for v in string.gmatch(snaps, "%d+") do
+        if tonumber(v) == n then manager.machine.video:snapshot() end
+      end
+    end
     if n >= maxh then finished = true end
     return data
   end)

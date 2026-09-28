@@ -53,7 +53,18 @@ proc on_handler {} {
     }
     apply_inputs $::pre
 }
+# optional: SNAP=h: screenshot at handler h (renders real frames from h-40)
 proc on_sync {} {
+    if {[info exists ::env(SNAP)]} {
+        if {$::h == $::env(SNAP) - 40} { set ::throttle on }
+        if {$::h == $::env(SNAP)} {
+            debug break
+            after realtime 0.3 [list apply {{} {
+                screenshot -raw $::env(SNAPFILE)
+                exit
+            }}]
+        }
+    }
     apply_inputs $::post
     puts -nonewline $::out [debug read_block memory 0x6000 4096]
     puts -nonewline $::out [debug read_block memory 0x7000 4096]

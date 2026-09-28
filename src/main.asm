@@ -22,6 +22,9 @@
 
 VSTUB_BASE      equ $BE00       ; arcade ld (nn),a video stubs (tools/patch_arcade.py)
 dirty_q         equ $5700       ; 256-byte aligned, inside the unused DIP-test code
+ent_cache       equ $5800       ; sprites: 32 x [code, attr, name, colour], page aligned
+slot_key        equ $5900       ; sprite cache: 64 x key word ($FFFF = empty), page aligned
+slot_frame      equ $5980       ; sprite cache: frame each slot was last used
 ARC_HI_BANK     equ 0           ; arcade $6000-$7FFF, mapped at $C000 while it runs
 ARC_LO_BANK     equ 1           ; arcade $0000-$5FFF in 8KB pieces, banks 1-3
 ; Reading $FFC0-$FFFF switches MegaCart banks, so no bank may keep data in its
@@ -51,6 +54,12 @@ up_bank:        ds 1
 up_set:         ds 2
 up_len:         ds 2
 up_off:         ds 2
+spr_key:        ds 2            ; sprites.asm
+evict_ptr:      ds 1
+spr_ybase:      ds 1
+spr_y:          ds 1
+spr_out:        ds 1            ; SAT entries written this frame
+spr_tmp:        ds 4            ; resolve scratch for entries past the cache
 key_prev:       ds 1            ; keypad value last frame
 coin_hold:      ds 1            ; frames left to hold the coin line low
 inp_override:   ds 1            ; test scripts: nonzero = use inp_p1/inp_p2 as-is
@@ -103,10 +112,14 @@ repend:         ds 1            ; a vblank arrived while one was being delivered
         incbin "build/tiles/tables.bin"
         ds $10000-$, $FF
 
-        dup MC_FIXED-13, n              ; banks 13-14: spare
-        org $C000
+        org $C000                       ; bank 13: sprite patterns, codes 0-63 + colours
+        incbin "build/sprites/pat.bin", 0, $2000
+        incbin "build/sprites/col.bin"
         ds $10000-$, $FF
-        edup
+
+        org $C000                       ; bank 14: sprite patterns, codes 64-127
+        incbin "build/sprites/pat.bin", $2000, $2000
+        ds $10000-$, $FF
 
 ; =============================================================================
 ; FIXED BANK  ($8000-$BFFF) - last 16KB of the image
@@ -173,6 +186,7 @@ start:
         ld (hl), 0
         ldir
         call render_init
+        call sprites_init
         call inputs_idle
 
         ld a, ARC_HI_BANK       ; the arcade's upper half stays mapped from now on
@@ -702,6 +716,7 @@ font:   incbin "build/font.bin"
 font_len equ $-font
 
         include "render.asm"
+        include "sprites.asm"
 
         assert $ <= VSTUB_BASE
         ds VSTUB_BASE-$, $FF

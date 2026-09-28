@@ -168,6 +168,9 @@ render:
         ld a, (up_state)
         or a
         jp nz, upload_step
+        ld a, (cw)
+        inc a
+        call nz, sprites_update ; first, inside vblank
         call check_colourway
         ld a, (up_state)
         or a
@@ -282,6 +285,10 @@ upload_start:
         ld (up_off), hl
         ld a, 1
         ld (up_state), a
+        ld hl, VR_SAT           ; no sprites while the tiles change
+        call vdp_set_write
+        ld a, SAT_END
+        out (VDP_DATA), a
         ld a, VDP_R1_ON & ~$40  ; blank the display while tiles change
         ld c, 1
         jp vdp_reg
