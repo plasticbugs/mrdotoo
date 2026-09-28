@@ -138,9 +138,13 @@ def _draft_row(cols, mask):
     the pair covering the most weight (cherry pixels count 3, dirt 1); any
     other colour goes to the nearer of the two. (The Cherry Lab's drafts,
     chosen by the user, 2026-09-28.)"""
+    return _reduce_row(cols, [3 if m else 1 for m in mask])
+
+
+def _reduce_row(cols, weights):
     w = Counter()
-    for c, m in zip(cols, mask):
-        w[c] += 3 if m else 1
+    for c, k in zip(cols, weights):
+        w[c] += k
     cand = list(w)
     if len(cand) <= 2:
         return list(cols)
@@ -160,24 +164,60 @@ def cherry_design(dirt_pair):
     tms = [[1] * 16 for _ in range(16)]
     msk = [[0] * 16 for _ in range(16)]
     for (qx, qy), t in CHERRY_QUAD.items():
-        out = [[(0, 0, 0)] * 8 for _ in range(8)]
-        m = [[0] * 8 for _ in range(8)]
-        for layer, tiles, (attr, tile) in ((0, _BGT, dirt_pair), (1, _FGT, (0, t))):
-            art = tiles[tile + ((attr & 0x80) << 1)]
-            line = (attr & 0x3F) * 4
-            for y in range(8):
-                for x in range(8):
-                    pen = art[y][x]
-                    if pen or attr & 0x40:
-                        out[y][x] = _PAL[line + pen]
-                        if layer == 1 and pen:
-                            m[y][x] = 1
-        out, m = rot(out), rot(m)
+        cell, m = _arcade_cell(dirt_pair, t)
         for y in range(8):
             for x in range(8):
-                tms[qy * 8 + y][qx * 8 + x] = tms_index(out[y][x])
+                tms[qy * 8 + y][qx * 8 + x] = cell[y][x]
                 msk[qy * 8 + y][qx * 8 + x] = m[y][x]
     return [_draft_row(tms[y][0:8], msk[y][0:8]) + _draft_row(tms[y][8:16], msk[y][8:16]) for y in range(16)]
+
+
+def _arcade_cell(dirt_pair, t):
+    """fg tile t over the dirt, arcade layers: 8x8 TMS colours (player view)
+    and the fg's own pixels."""
+    out = [[(0, 0, 0)] * 8 for _ in range(8)]
+    m = [[0] * 8 for _ in range(8)]
+    for layer, tiles, (attr, tile) in ((0, _BGT, dirt_pair), (1, _FGT, (0, t))):
+        art = tiles[tile + ((attr & 0x80) << 1)]
+        line = (attr & 0x3F) * 4
+        for y in range(8):
+            for x in range(8):
+                pen = art[y][x]
+                if pen or attr & 0x40:
+                    out[y][x] = _PAL[line + pen]
+                    if layer == 1 and pen:
+                        m[y][x] = 1
+    out, m = rot(out), rot(m)
+    return [[tms_index(c) for c in row] for row in out], m
+
+
+def cherry_dug(dirt_pair, design):
+    """The part-dug cherry tiles (dig-morph outputs of a cherry quarter,
+    $94-$9B/$DC-$E3) from the designed quarter: pixels the arcade draws the
+    same as the whole quarter keep the design, the rest (the tunnel bite)
+    take the arcade's colour; each row back to 2 colours, the bite weighted
+    most. -> {tile: 8x8 TMS colours}."""
+    out = {}
+    for (qx, qy), q in CHERRY_QUAD.items():
+        whole, qm = _arcade_cell(dirt_pair, q)
+        for d in range(8):
+            t = DIG_BLOB[(q - 0x77) * 8 + d]
+            if t == q or t in out:
+                continue
+            dug, _ = _arcade_cell(dirt_pair, t)
+            rows = []
+            for y in range(8):
+                cols, w = [], []
+                for x in range(8):
+                    if dug[y][x] == whole[y][x]:
+                        cols.append(design[qy * 8 + y][qx * 8 + x])
+                        w.append(3 if qm[y][x] else 1)
+                    else:
+                        cols.append(dug[y][x])
+                        w.append(5)
+                rows.append(_reduce_row(cols, w))
+            out[t] = rows
+    return out
 
 
 def apple_sprite():
@@ -262,18 +302,21 @@ def main():
         black = code_of(compose(blank_bg, BLANK[1], 0))           # code 0 = black
         plain_dirt = code_of(compose(dirt_pair, BLANK[1], 0))
         tbla, tblb = bytearray([plain_dirt] * 256), bytearray([black] * 256)
+        design = cherry_design(dirt_pair)
+        dug = cherry_dug(dirt_pair, design)
         for t in GAMEPLAY_FG:
             attr = CENTER_ATTR if t in CENTER_ART[2] else 0
-            if t not in CHERRY_QUAD.values():   # (over dirt: designed, below)
+            if t not in CHERRY_QUAD.values() and t not in dug:   # (designed, below)
                 tbla[t] = code_of(compose(dirt_pair, t, attr))
             tblb[t] = code_of(compose(blank_bg, t, attr))
         # Cherries over dirt: designed per level look (tools/data/cherries.json
         # from the Cherry Lab, else the 2-colours-per-row draft) instead of
         # the composed arcade layers, whose reduction dropped different
         # details on every background.
-        design = cherry_design(dirt_pair)
         for (qx, qy), t in CHERRY_QUAD.items():
             cell = [design[qy * 8 + y][qx * 8:qx * 8 + 8] for y in range(8)]
+            tbla[t] = code_of(to_screen2(cell))
+        for t, cell in dug.items():
             tbla[t] = code_of(to_screen2(cell))
         for t in FONT:          # text over black (HUD / messages in the field)
             tblb[t] = code_of(compose(blank_bg, t, FONT_ATTR))
