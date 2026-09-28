@@ -191,6 +191,8 @@ render_init:
         ld a, $FF
         ld (cw), a
         ld (scr), a
+        ld (plate_want), a
+        ld (plate_food), a
         xor a
         ld (mode), a
         ld (cw_valid), a
@@ -223,8 +225,14 @@ render_body:
         cp MODE_IMAGE
         ret z                   ; (an image just went up: nothing to draw)
         cp MODE_SCREEN
+        jr z, .scrm
+        ld a, (plate_want)      ; a new dessert on the playfield: its tiles
+        ld hl, plate_food
+        cp (hl)
+        call nz, plate_load
         ld a, TBL_BANK
-        jr nz, .bank
+        jr .bank
+.scrm:
         call scene_update       ; (a cutscene's scrolling band, if any)
         ld a, (scr_hbank)
 .bank:  call select_bank
@@ -285,6 +293,9 @@ render_body:
         or a
         jr nz, .upload
         call flip_pnt
+        ld a, (mode)            ; HUD cells written during a bulk repaint were
+        cp MODE_PLAYFIELD       ; only counted, not queued
+        call z, hud_redraw
         jr .done
 .upload:
         ld a, (ARC_WORK)        ; the dessert sequence ($E000 bit 3; the field
@@ -556,7 +567,19 @@ upload_set:
         ld hl, VR_CT
         ld de, 2 + SET_MAX*8
         call .table
-        xor a
+        ld a, $FF               ; codes PLATE_CODE.. now hold the set's first
+        ld (plate_food), a      ; dessert, or a screen's tiles
+        ld a, (mode)
+        cp MODE_PLAYFIELD
+        jr nz, .noh
+        call hud_upload         ; the HUD glyphs and panel (hud.asm)
+        ld a, (plate_want)
+        cp $FF
+        call nz, plate_load
+        jr .hd
+.noh:   xor a                   ; a screen: no panel (its set overwrote the
+        call hud_clear          ; HUD glyphs)
+.hd:    xor a
         ld (up_pending), a
         call flip_pnt
         ld a, VDP_R7
@@ -944,6 +967,12 @@ not_dirt:
         ld a, e
         cp 48
         jr nc, .tblb
+        rrca                    ; the dessert (tile / 4) goes into codes
+        rrca                    ; PLATE_CODE.. (hud.asm plate_load)
+        and $0F
+        ld (plate_want), a
+        ld a, e
+        and 3
         add a, DESSERT_BASE
         scf
         ret
@@ -1002,6 +1031,16 @@ draw_cell:
         call in_band
         ret c                   ; (scene_write took it at write time)
 .noband:
+        ld a, (mode)            ; the HUD strips (native columns 0-2, 29-31)
+        cp MODE_PLAYFIELD       ; go to the panel (hud.asm)
+        jr nz, .nohud
+        ld a, e
+        and $1F
+        cp 3
+        jp c, hud_cell
+        cp 29
+        jp nc, hud_cell
+.nohud:
         ld a, e                 ; native row = cell >> 5
         and $E0
         or d

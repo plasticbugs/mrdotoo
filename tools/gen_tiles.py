@@ -38,7 +38,8 @@ MAX = 224
 SCORE_BASE = 163            # codes 163-175: the dessert score bg tiles $15-$21 (attr 9)
 SCORE_TILES = range(0x15, 0x22)
 SCORE_ATTR = 0x09
-DESSERT_BASE = 176          # codes 176-223: the 48 dessert plate tiles                   # codes 0..223 per set; 224..255 stay free for the HUD
+DESSERT_BASE = 176          # codes 176-223: the 48 dessert plate tiles
+HUD_BASE = 180              # codes 180-255: the HUD panel glyphs                   # codes 0..223 per set; 224..255 stay free for the HUD
 SET_BYTES = 2 + MAX * 16
 FONT_ATTR = 0x09
 CENTER_ATTR = CENTER_ART[1]
@@ -222,7 +223,10 @@ def main():
             cols.append(pats_cols[1])
         assert len(pats) <= MAX, f"colourway {dirt_pair}: {len(pats)} codes > {MAX}"
         counts.append(len(pats))
-        blob = bytearray([len(pats), 0])
+        # count = codes upload_set writes: the dessert plates (176-223)
+        # load one dessert at a time into 176-179, codes 180-255 are the HUD's
+        # (tools/gen_hud.py, src/hud.asm)
+        blob = bytearray([HUD_BASE, 0])
         blob += b"".join(pats) + bytes(8 * (MAX - len(pats)))
         blob += b"".join(cols) + bytes(8 * (MAX - len(cols)))
         assert len(blob) == SET_BYTES

@@ -105,6 +105,9 @@ snd_nvol2:      ds 1            ;   chip 2 noise volume (AY scale)
 snd_tvolc:      ds 1            ;   chip 2 tone 2 volume (AY scale)
 snd_due:        ds 1            ;   sound ticks owed (one per vblank)
 up_hold:        ds 1            ; vblanks a tile-set change has waited (render.asm)
+hud_p:          ds 1            ; hud.asm: panel cell being written
+plate_want:     ds 1            ;   dessert the playfield shows ($FF: none yet)
+plate_food:     ds 1            ;   dessert in codes PLATE_CODE.. ($FF: none)
 scn_flush2:     ds 1            ; a heavy build's colours and names are due
 scn_brow:       ds 1            ; next band row of the build under way (0 = none)
 scn_lastn:      ds 1            ; tiles of the previous build
@@ -207,6 +210,8 @@ pf_drops:       ds 2            ; vblanks skipped so the pathfinder could run
 
         org $C000                       ; bank 30 (SPR_BANK_W): Mr. Do's white
         incbin "build/sprites/mrdo_white.bin", 0, $2000  ; overlay patterns
+        ds $E100-$, $FF                 ; the HUD panel's glyphs and tables
+        incbin "build/tiles/hud.bin"    ; (tools/gen_hud.py, src/hud.asm)
         ds $10000-$, $FF
 
 ; =============================================================================
@@ -890,6 +895,8 @@ font_len equ $-font
         include "scene.asm"
         include "image.asm"
         include "sound.asm"
+        include "hud.asm"
+        include "build/tiles/hud.inc"
 
         assert $ <= OPT_BASE
         ds OPT_BASE-$, $FF
