@@ -47,13 +47,16 @@ SGM_LOWER       equ $7F         ; $0F: BIOS at $0000-$1FFF, $0D: 8KB RAM there
 ; The LAST 16KB bank of the image is fixed at $8000-$BFFF. Reading $FFC0+n maps
 ; bank n into $C000-$FFFF. Switching code must live in the fixed bank or in RAM.
 MC_HOTSPOT      equ $FFC0
-MC_BANKS        equ 8           ; 128KB image; raise as content grows
+MC_BANKS        equ 16          ; 256KB image
 MC_FIXED        equ MC_BANKS-1
 
 ; --- Memory map at run time (see tools/patch_arcade.py) -----------------------------
 ; $0000-$5FFF  RAM: arcade code + tables at their ORIGINAL addresses (patched copy)
 ;              $0008 = pending-vblank hook (the arcade's `ei`s became `rst $08`)
 ;              $0066 = our NMI vector (arcade had `retn` there)
+;              $56AF-$59BF = driver RAM: the arcade's DIP-switch test code, never
+;                            run (entered only with both fire buttons held at boot)
+;                            $5700-$57FF = renderer dirty-cell queue
 ;              $59D0-$5A7F = driver variables (unused $FF padding in the arcade ROM)
 ; $6000-$6FFF  RAM: arcade work RAM ($E000-$EFFF); arcade stack tops at $6B80
 ;              $63B0-$63B9 = I/O cells ($9800-3, $A000-3, scroll $F000/$F800)

@@ -20,6 +20,8 @@
 
         include "hw.inc"
 
+VSTUB_BASE      equ $BE00       ; arcade ld (nn),a video stubs (tools/patch_arcade.py)
+dirty_q         equ $5700       ; 256-byte aligned, inside the unused DIP-test code
 ARC_HI_BANK     equ 0           ; arcade $6000-$7FFF, mapped at $C000 while it runs
 ARC_LO_BANK     equ 1           ; arcade $0000-$5FFF in 8KB pieces, banks 1-3
 ; Reading $FFC0-$FFFF switches MegaCart banks, so no bank may keep data in its
@@ -31,8 +33,24 @@ frame_cnt:      ds 2            ; +1 per vblank
 irq_count:      ds 2            ; arcade vblank handler entries
 deferred_cnt:   ds 2            ; vblanks held because the arcade had interrupts off
 cur_bank:       ds 1            ; bank currently mapped at $C000
-dbg_row:        ds 1            ; debug view: next screen row to draw
-dbg_cam:        ds 1            ; debug view: first player-view row shown
+in_nmi:         ds 1            ; nonzero while the NMI's own work runs
+; renderer (render.asm)
+vtmp:           ds 1
+q_head:         ds 1            ; dirty queue byte offsets (arcade side writes)
+q_tail:         ds 1            ; (NMI side writes)
+redraw_all:     ds 1
+rd_row:         ds 1            ; full redraw: next screen row, PF_ROWS = idle
+cam:            ds 1            ; first player-view tile row shown (3-5)
+cw:             ds 1            ; colourway on screen, $FF = none yet
+cw_attr:        ds 1            ; bg pair last seen at the playfield corner
+cw_tile:        ds 1
+dirt_tile:      ds 1
+tbl_page:       ds 1            ; TBLA page in the tables bank
+up_state:       ds 1            ; tile upload: 0 idle, 1-6 table in progress
+up_bank:        ds 1
+up_set:         ds 2
+up_len:         ds 2
+up_off:         ds 2
 key_prev:       ds 1            ; keypad value last frame
 coin_hold:      ds 1            ; frames left to hold the coin line low
 inp_override:   ds 1            ; test scripts: nonzero = use inp_p1/inp_p2 as-is
@@ -70,10 +88,23 @@ repend:         ds 1            ; a vblank arrived while one was being delivered
         ds $10000-$, $FF
         edup
 
-        dup MC_FIXED-4, n               ; banks 4..: spare
+        dup 8, b                        ; banks 4-11: playfield tile sets, 4 each
         org $C000
-        ds $2000, $FF
-        db n+4
+        if (b*4+4)*3586 <= 111166
+        incbin "build/tiles/sets.bin", b*4*3586, 4*3586
+        else
+        incbin "build/tiles/sets.bin", b*4*3586
+        endif
+        ds $FFC0-$, $FF
+        ds $40, $FF
+        edup
+
+        org $C000                       ; bank 12: TBLA/TBLB per colourway + dirt pairs
+        incbin "build/tiles/tables.bin"
+        ds $10000-$, $FF
+
+        dup MC_FIXED-13, n              ; banks 13-14: spare
+        org $C000
         ds $10000-$, $FF
         edup
 
@@ -141,8 +172,7 @@ start:
         ld bc, DRV_RAM_END-DRV_RAM-1
         ld (hl), 0
         ldir
-        ld a, 4
-        ld (dbg_cam), a
+        call render_init
         call inputs_idle
 
         ld a, ARC_HI_BANK       ; the arcade's upper half stays mapped from now on
@@ -151,7 +181,8 @@ start:
         ld a, VDP_R1_ON
         ld c, 1
         call vdp_reg
-        jp ARC_RESET            ; the arcade cold start: ld sp,$6B80 / jp $0068
+        ld sp, BOOT_STACK       ; the arcade's reset: ld sp,$EB80 / jp $0068
+        jp $0068                ; ($0000 now holds the rst $00 hook)
 
 ; Copy the patched arcade image into RAM at $0000-$5FFF.
 load_arcade:
@@ -175,6 +206,22 @@ install_hooks:
         ld de, $0008
         ld bc, ei_hook_len
         ldir
+        ld hl, rst_vectors      ; video store hooks (render.asm)
+.vec:   ld e, (hl)
+        inc hl
+        ld d, (hl)
+        inc hl
+        ld a, e
+        and d
+        inc a
+        jr z, .done             ; $FFFF ends the list
+        ld a, $C3
+        ld (de), a
+        inc de
+        ldi
+        ldi
+        jr .vec
+.done:
         ifdef VALIDATE
         ld hl, validate_hooks   ; $0010 and $0018, see validate_hooks
         ld de, $0010
@@ -200,6 +247,15 @@ validate_hooks:
         db $33, $33, $CF, $18, $FE  ; $0010: inc sp / inc sp / ei (rst $08) / jr $
         db $33, $33, $CF, $C9       ; $0018: inc sp / inc sp / ei (rst $08) / ret
         endif
+
+; rst vector -> handler (the arcade uses no rst of its own)
+rst_vectors:
+        dw $0000, vh_hl_b
+        dw $0020, vh_hl_a
+        dw $0028, vh_de_a
+        dw $0030, vh_hl_n
+        dw $0038, vh_hl_c
+        dw $FFFF
 
 ; $0008 hook, reached by rst $08 (every arcade `ei`). The byte at $0009 picks
 ; the path, so the NMI can switch it with one (atomic) write.
@@ -231,9 +287,16 @@ nmi:
         ld hl, (frame_cnt)
         inc hl
         ld (frame_cnt), hl
+        ld a, (in_nmi)          ; our own work overran a frame: skip this one
+        or a
+        jr nz, .nested
+        inc a
+        ld (in_nmi), a
 
-        call dbg_render
+        call render
         call read_inputs
+        xor a
+        ld (in_nmi), a
 
         ld a, i                 ; P/V = IFF2 = the arcade's interrupt enable
         jp po, .hold
@@ -265,6 +328,13 @@ nmi:
         pop af
         di                      ; clears IFF2 too, like an IRQ acknowledge
         jp irq_enter
+
+.nested:
+        pop hl
+        pop de
+        pop bc
+        pop af
+        retn
 
 .hold:  ld hl, (deferred_cnt)
         inc hl
@@ -409,15 +479,7 @@ read_inputs:
         jr nz, .nk1
         ld a, 4
         ld (coin_hold), a
-.nk1:   ld a, (hl)
-        cp KEY_HASH
-        jr nz, .held
-        ld a, (dbg_cam)         ; # cycles the debug view window
-        add a, 4
-        cp 12
-        jr c, .cam
-        xor a
-.cam:   ld (dbg_cam), a
+.nk1:
 .held:  ld a, (hl)
         cp KEY_1
         jr nz, .n1
@@ -448,74 +510,6 @@ KEY_1           equ $0D
 KEY_2           equ $07
 KEY_STAR        equ $06
 KEY_HASH        equ $09
-
-; -----------------------------------------------------------------------------
-; DEBUG VIEW: the arcade foreground tile layer, rotated to the player's view.
-; Player-view row p, column x shows arcade fg tile (native row x+4, native
-; column 31-p). Font tiles $00-$23 show as text; any other tile shows as a
-; dot, blank ($29) as blank. Six screen rows per vblank (a full redraw every
-; four frames).
-; -----------------------------------------------------------------------------
-dbg_render:
-        ld b, 6
-.row:   push bc
-        ld a, (dbg_row)
-        ld e, a                 ; E = screen row
-        ld l, a                 ; name table address = $1800 + row*32
-        ld h, 0
-        add hl, hl
-        add hl, hl
-        add hl, hl
-        add hl, hl
-        add hl, hl
-        ld bc, VR_PNT
-        add hl, bc
-        call vdp_set_write
-        ld a, (dbg_cam)         ; native column = 31 - (row + cam)
-        add a, e
-        cpl
-        and $1F
-        ld l, a
-        ld h, 0
-        ld bc, ARC_FG_TILE + 4*32
-        add hl, bc              ; HL = fg tile at native row 4, that column
-        ld de, 32
-        ld b, 24
-.cell:  ld a, (hl)
-        push hl
-        ld hl, dbg_lut
-        add a, l
-        ld l, a
-        jr nc, .nc
-        inc h
-.nc:    ld a, (hl)
-        out (VDP_DATA), a
-        pop hl
-        add hl, de
-        djnz .cell
-        ld a, (dbg_row)
-        inc a
-        cp 24
-        jr c, .next
-        xor a
-.next:  ld (dbg_row), a
-        pop bc
-        djnz .row
-        ret
-
-; arcade fg tile -> debug font tile
-dbg_lut:
-        dup 36, n
-        db n                    ; $00-$23: 0-9, A-Z
-        edup
-        ds $29-36, T_DOT
-        db T_BLANK              ; $29: blank
-        ds $72-$2A, T_DOT
-        ds 4, $17               ; $72-$75: monster nest -> N
-        ds 1, T_DOT
-        db T_BLANK              ; $77: solid dirt
-        ds 4, $0C               ; $78-$7B: cherry quarters -> C
-        ds 256-$7C, T_DOT
 
 ; -----------------------------------------------------------------------------
 ; A = bank number -> mapped at $C000-$FFFF. Clobbers HL.
@@ -568,6 +562,7 @@ sgm_present:
 ; only the native 1KB of RAM.
 no_sgm:
         call vdp_init
+        call load_font
         ld hl, VR_PNT + 10*32 + 3
         ld de, s_nosgm1
         call print_vram
@@ -625,6 +620,8 @@ vdp_copy:
         jr nz, .loop
         ret
 
+; Registers, all 16KB of VRAM cleared (every pattern and name blank), sprites
+; off. The renderer uploads a tile set once the arcade draws a playfield.
 vdp_init:
         ld hl, vdp_regs
         ld c, 0
@@ -635,13 +632,19 @@ vdp_init:
         ld a, c
         cp 8
         jr nz, .reg
-
-        ld hl, $0000            ; clear all 16KB
+        ld hl, $0000
         ld bc, $4000
         xor a
         call vdp_fill
+        ld hl, VR_SAT
+        call vdp_set_write
+        ld a, SAT_END
+        out (VDP_DATA), a
+        ret
 
-        ld b, 3                 ; font into every third of the pattern table
+; Font in every third, white on black, blank name table (SGM-required screen).
+load_font:
+        ld b, 3
         ld hl, VR_PT
 .third: push bc
         push hl
@@ -653,22 +656,14 @@ vdp_init:
         add hl, bc
         pop bc
         djnz .third
-
-        ld hl, VR_CT            ; white on black everywhere
+        ld hl, VR_CT
         ld bc, $1800
         ld a, $F1
         call vdp_fill
-
         ld hl, VR_PNT
         ld bc, 32*24
         ld a, T_BLANK
-        call vdp_fill
-
-        ld hl, VR_SAT
-        call vdp_set_write
-        ld a, SAT_END
-        out (VDP_DATA), a
-        ret
+        jp vdp_fill
 
 vdp_regs:
         db VDP_R0, VDP_R1_OFF, VDP_R2, VDP_R3, VDP_R4, VDP_R5, VDP_R6, VDP_R7
@@ -706,5 +701,11 @@ font:   incbin "build/font.bin"
         db $00, $00, $00, $18, $18, $00, $00, $00   ; T_DOT
 font_len equ $-font
 
+        include "render.asm"
+
+        assert $ <= VSTUB_BASE
+        ds VSTUB_BASE-$, $FF
+        include "build/vstubs.inc"
+        assert $ <= $C000
         ds $C000-$, $FF
         outend

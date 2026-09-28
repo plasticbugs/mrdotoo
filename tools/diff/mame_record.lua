@@ -60,6 +60,14 @@ local function install()
     end
     return data
   end)
+  -- optional: ROMW=1 logs every write into ROM addresses ($0000-$7FFF),
+  -- which the arcade board ignores but the port's RAM copy would not
+  if os.getenv("ROMW") then
+    taps[6] = mem:install_write_tap(0x0000, 0x7FFF, "romw", function(off, data, mask)
+      print(string.format("ROMW h=%d pc=%04x %04x<-%02x", n, cpu.state["CURPC"].value, off, data & 0xFF))
+      return data
+    end)
+  end
   -- optional: RTRACE=h logs fg-tile reads during handler h (after its sync)
   local rt = tonumber(os.getenv("RTRACE") or "-1")
   if rt >= 0 then
@@ -120,6 +128,9 @@ emu.register_frame_done(function()
   if finished == nil then return end
   if f == 600 then setf(P2, "Coin 1", 1) elseif f == 606 then setf(P2, "Coin 1", 0) end
   if f == 700 then setf(P1, "1 Player Start", 1) elseif f == 706 then setf(P1, "1 Player Start", 0) end
+  if os.getenv("ALPHA") and f > 1500 and f % 2400 == 0 then
+    mem:write_u8(0xE0B2, mem:read_u8(0xE0B2) | 3)
+  end
   if f > 800 then
     hold = hold - 1
     if hold <= 0 then
