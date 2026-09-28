@@ -67,6 +67,8 @@ TOUT = ROOT / "build" / "tiles"
 CORE = HACK / "mrdo_core.asm"
 TSET = HACK / "tilesetscr2.asm"
 
+COLOUR_FIX = {(0x67, 5): 15, (0x68, 5): 15, (0x26, 2): 8}   # (code, colour line) -> TMS colour
+
 EXTRA_NAMES = ["LETTER_E", "LETTER_X", "LETTER_T", "LETTER_R", "LETTER_A",
                "ALPHA_BLANK", "APPLE", "APPLE_HALF_SPLIT", "APPLE_SPLIT",
                "SQUISHED", "DIAMOND", "BALL"] + [f"BALL_EXPLODE_{i}" for i in range(6)]
@@ -613,6 +615,14 @@ def main():
                         iou(main_, masks[code * 4]), f"dessert {food}")
 
     cherry_art, cfile = cherry_tiles(pt, ct)
+
+    # Hand-picked colours (user, 2026-09-28): the apple's last frames (the
+    # burst $68/$67 before its score, colour line 5) white instead of the
+    # dominant yellow; Mr. Do's last death frame ($26, line 2) red like the
+    # other death frames: white is its most common colour, which made it all
+    # white; his white overlay (mrdo_white.bin) now draws the white.
+    for (code, ln), c in COLOUR_FIX.items():
+        col[code * 16 + ln] = c
 
     OUT.mkdir(parents=True, exist_ok=True)
     TOUT.mkdir(parents=True, exist_ok=True)
