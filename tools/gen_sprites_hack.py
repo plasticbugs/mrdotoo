@@ -317,6 +317,7 @@ def iou(a, b):
 WALK = ["BADGUY_RIGHT_WALK_01_PAT", "BADGUY_RIGHT_WALK_02_PAT"]
 DIG = ["DIGGER_RIGHT_01_PAT", "DIGGER_RIGHT_02_PAT"]
 PUSH = ["BadGuyPushRight_01", "BadGuyPushRight_02"]
+CHOMP = ["CHOMPER_RIGHT_CLOSED_PAT", "CHOMPER_RIGHT_OPEN_PAT"]
 APPLE = "EXTRA_SPRITE_COMP#APPLE"
 HALF = "EXTRA_SPRITE_COMP#APPLE_HALF_SPLIT"
 SPLIT = "EXTRA_SPRITE_COMP#APPLE_SPLIT"
@@ -337,6 +338,10 @@ MAP = [
     ("digger vertical", [0x36, 0x37, 0x38], DIG, ALL8, "digger"),
     ("monster push", [0x39, 0x3A, 0x3B], PUSH, ALL8, "monster"),
     ("monster squashed by apple", [0x3C], [SQUISH], ["id", "mx"], "squish"),
+    ("chomper horizontal", [0x27, 0x28], CHOMP, ALL8, "chomper"),
+    # vertical movers: the arcade turns them, so only the turned forms of the
+    # hack's right-facing art (the group's shared facing picked them unturned)
+    ("chomper vertical", [0x29, 0x2A], CHOMP, ["rcw", "rccw", "tr", "atr"], "chomper"),
     ("apple", [0x5E], [APPLE], ["id"], "apple"),
     ("apple wobble", [0x5D, 0x5F], [APPLE], ["id"], "apple"),
     ("apple break frame 1 L", [0x60], [HALF + ".L"], ["id"], "apple"),
@@ -371,6 +376,7 @@ CHERRY_COLOURS = {1, 6, 8, 9}                           # stem + reds (no dirt u
 HUE = {  # arcade-nearest TMS colour -> hack shade
     "monster": {6: 8, 8: 8, 9: 8, 4: 5, 5: 5, 7: 7},
     "digger": {4: 5, 5: 5, 7: 7, 6: 8, 8: 8, 9: 8},
+    "chomper": {4: 5, 5: 5, 7: 7, 6: 8, 8: 8, 9: 8},
     "apple": {6: 8, 8: 8, 9: 8},
     "squish": {6: 13, 8: 13, 9: 13},
     # alpha: the hack's two shades (yellow 11, red 8); blues -> light blue 5
@@ -625,8 +631,6 @@ def main():
 
 ARCADE_NOTES = {
     **{c: "Mr. Do (kept arcade by request)" for c in range(0x00, 0x27)},
-    0x27: "chomper (kept arcade)", 0x28: "chomper (kept arcade)",
-    0x29: "chomper (kept arcade)", 0x2A: "chomper (kept arcade)",
     0x2B: "squashed alpha/chomper (kept arcade)", 0x2C: "squashed alpha/chomper (kept arcade)",
     0x43: "dessert 6 waffle: no hack art", 0x44: "dessert 7 sandwich: no hack art",
     0x49: "flattened alpha (kept arcade)", 0x4A: "flattened alpha (kept arcade)",
