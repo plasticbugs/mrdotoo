@@ -43,7 +43,7 @@ Arcade-faithful port of Mr. Do! (Universal 1982) to the ColecoVision + Super Gam
 - Port consequence: the CV vblank is an NMI (unmaskable). The NMI handler must copy the RAM buffers to VRAM first. It then runs the arcade handler only if that handler is not already running; if it is, it sets a pending flag, which the translated code services at its `ei` points (this imitates the level-held IRQ). The pathfinder's context discard and SP reset must be kept exactly.
 
 ## Target hardware
-- ColecoVision + Super Game Module, on MegaCart cartridge boards. The user has an SGM and a flash cart for testing real-hardware builds; test on hardware as soon as the renderer exists (the VDP needs ~8µs between VRAM writes during active display, and openMSX doesn't enforce it strictly).
+- ColecoVision + Super Game Module, on MegaCart cartridge boards. The user has an SGM and a flash cart for testing real-hardware builds; test on hardware as soon as the renderer exists (the VDP needs ~8µs between VRAM writes during active display). openMSX does drop writes that come too fast: unspaced writes "inside vblank" corrupted cutscene tiles whenever the NMI ran late, so keep every VRAM write spaced >= 29-30 T unless the display is blanked.
 - The game must detect a missing SGM and show a "Super Game Module required" screen.
 
 ## How the arcade program runs (Phase 1)

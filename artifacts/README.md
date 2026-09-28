@@ -34,3 +34,4 @@ recordings, one folder per milestone. Files here are committed; `build/` is not.
 - `08-no-black-flash/`: green-to-red chomper transition in one step (arcade top, CV bottom; one flat red frame during the tile upload); the instruction screen as its own captured screen set; a forced chomper session with the chompers out of the nest.
 - `09-very-good-cutscene/`: the high-score table and WONDERFUL as captured screen sets; the VERY GOOD cutscene with the arcade's scrolling characters (pre-shifted pair tiles streamed each build); a simulation of the ROM tables against the arcade render; the sequence on the CV.
 - `10-all-cutscenes/`: diamond (SPECIAL) and EXTRA scenes as captured screens, after the logic fixes that made their text appear (unrelocated scene records, broken ROM checksums).
+- `11-speed-and-vg-fix/`: consecutive VERY GOOD finale frames after the fix (no torn characters): spaced VRAM writes, whole-band builds between arcade frames.

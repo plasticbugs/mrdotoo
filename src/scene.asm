@@ -14,7 +14,7 @@
 ;   IDC       (VRAM) the pair id + 1 at each native row r: for phase 0 (r
 ;             alone) and for the other phases (r and r + 1); 0 = nothing.
 ; Both are filled when a scene starts (a few vblanks, before the first build)
-; and patched by scene_mark when the arcade changes a band cell.
+; and patched from the arcade's band writes (scene_write, scene_apply).
 ;
 ; A build (two vblanks, half of the band's rows each) gives every cell with
 ; art the next tile slot of the slot bank that is NOT on screen, notes the
@@ -39,8 +39,10 @@ PAIR_KEYS       equ $C000       ; pair bank (tools/gen_screens.py): 512 keys,
 PAIR_ID         equ $C800       ;   ids, and each pair's tiles at phases 0, 2,
 PAIR_DATA       equ $D000       ;   4, 6 at PAIR_DATA + id * 64
 FILL_DONE       equ 2           ; scn_fill: 0 masks, 1 IDC, 2 done
-ROWS_LIGHT      equ 3           ; band rows built per vblank
-ROWS_HEAVY      equ 2
+ROWS_LIGHT      equ 6           ; band rows built per vblank: all of them. A build
+ROWS_HEAVY      equ 6           ; split over vblanks mixed rows from different
+                                ; frames (the arcade animates legs by rewriting
+                                ; tiles): torn characters
 HEAVY_TILES     equ 24          ; tiles in a build that make it heavy
 
 ; Called by render_body in screen mode, before the static cells are drawn.
@@ -66,7 +68,7 @@ scene_update:
         or b
         ret nz
         ld a, (IO_SCROLL_Y)     ; a new build? Only if the scroll step or a
-        and $FE                 ; band cell changed (scn_dirty: scene_mark)
+        and $FE                 ; band cell changed (scn_dirty: scene_write)
         ld b, a
         ld a, (scn_dirty)
         or a
@@ -74,8 +76,12 @@ scene_update:
         ld a, (scn_scroll)
         cp b
         ret z
-.start: ld a, b                 ; this scroll step, the other slot bank
+.start: ld a, (arc_idle)        ; only between arcade frames: inside its
+        or a                    ; handler a character may be half redrawn
+        ret z
+        ld a, b                 ; this scroll step, the other slot bank
         ld (scn_scroll), a
+        call scene_apply
         xor a
         ld (scn_dirty), a
         ld a, (scn_n)
@@ -147,6 +153,11 @@ scene_slot0:
 scene_fill_step:
         or a
         jr nz, .idc
+        ld hl, SCN_WRITES       ; the fill reads the arcade's latest
+        ld de, SCN_WRITES + 1
+        ld bc, 23
+        ld (hl), 0
+        ldir
         ld a, (scn_rows)
         ld b, a
         ld c, 0
@@ -364,26 +375,102 @@ scene_lookup:
 .none:  xor a
         ret
 
-; A = band screen row, DE = the cell (native row * 32 + column) the arcade
-; changed: its art bit, and its IDC entries (rows r - 1 and r, both phases)
-; become unknown, looked up again when a build needs them. Then a rebuild.
-scene_mark:
-        ld hl, scn_row0
-        sub (hl)
-        ld c, a                 ; C = band row
-        ld a, e                 ; B = native row = cell >> 5
-        and $E0
-        or d
+; The arcade's video store (queue_cell, arcade context). HL = video address
+; ($7000-$7FFF). A cell of a band row: its bit in SCN_WRITES, a rebuild, and
+; carry (queue_cell drops it). Otherwise no carry. Preserves BC, DE, HL.
+SCN_WRITES      equ $5F94       ; 6 band rows x 32 native rows, a bit each:
+        assert SCN_WRITES + 24 <= $6000   ; unused padding in the arcade image
+scene_write:
+        push bc
+        ld a, l                 ; screen row = 31 - column - cam
+        and $1F
+        cpl
+        and $1F
+        ld c, a
+        ld a, (cam)
+        ld b, a
+        ld a, c
+        sub b
+        call in_band
+        jr nc, .no
+        ld b, a
+        ld a, (scn_row0)
+        ld c, a
+        ld a, b
+        sub c                   ; band row
+        add a, a
+        add a, a
+        ld c, a                 ; C = band row * 4
+        ld a, h                 ; native row = cell >> 5: byte (row / 8),
+        and 3                   ; bit (row & 7) = bits 7-5 of L
+        add a, c
+        push hl
+        ld c, a
+        ld a, l
         rlca
         rlca
         rlca
+        and 7
         ld b, a
         ld a, 1
+        jr z, .b
+.sh:    add a, a
+        djnz .sh
+.b:     ld b, 0
+        ld hl, SCN_WRITES
+        add hl, bc
+        or (hl)
+        ld (hl), a
+        pop hl
+        ld a, 1
         ld (scn_dirty), a
-        ld a, (scn_fill)
-        cp FILL_DONE
-        ret c                   ; the fill will read it
+        pop bc
+        scf
+        ret
+.no:    pop bc
+        or a
+        ret
+
+; Before a build: every band cell the arcade wrote since the last one gets its
+; art bit and its IDC entries (rows r - 1 and r, both phases) marked unknown.
+; The arcade is paused during the NMI, so the build sees one frame.
+scene_apply:
+        ld hl, SCN_WRITES
+        ld c, 0                 ; C = band row
+.row:   ld a, (scn_rows)
+        cp c
+        ret z
+        ld b, 0                 ; B = native row of bit 0 of the byte
+.byte:  ld a, (hl)
+        or a
+        jr z, .nb
+        ld (hl), 0
+        push hl
+        ld e, a
+.bit:   srl e
+        jr nc, .nobit
         push bc
+        push de
+        call .cell
+        pop de
+        pop bc
+.nobit: inc b
+        ld a, b
+        and 7
+        jr nz, .bit
+        pop hl
+        jr .next
+.nb:    ld a, b
+        add a, 8
+        ld b, a
+.next:  inc hl
+        ld a, b
+        cp 32
+        jr c, .byte
+        inc c
+        jr .row
+; C = band row, B = native row.
+.cell:  push bc
         call scene_bit
         pop bc
         ld a, b
@@ -638,11 +725,11 @@ scene_do:
 
 ; -----------------------------------------------------------------------------
 ; The built bank's tiles, then the band's names into the name table on
-; screen. This runs first in the NMI, at the start of the vertical blank
-; (70 lines, ~15.9k T-states), where the VDP takes a write every 2 us: the
-; first FLUSH_FAST bytes go out back to back (~11k T-states with the
-; bookkeeping), the rest spaced >= 30 T-states for the active display.
-FLUSH_FAST      equ 400
+; screen. Every write is spaced >= 30 T-states: writing back to back from the
+; start of the NMI (assumed inside the vertical blank) corrupted tiles
+; whenever the NMI ran late (openMSX enforces the VDP's access slots too).
+; FLUSH_FAST = 8-byte groups allowed back to back (0: none).
+FLUSH_FAST      equ 0
 scene_flush:
         ld a, FLUSH_FAST / 8
         ld (scn_fast), a

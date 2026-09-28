@@ -84,7 +84,15 @@ vstore:
 ; repaint (the chomper session's 1248-byte fill) costs little and the
 ; renderer can tell when it has finished.
 queue_cell:
-        ld a, (redraw_all)
+        ld a, (mode)            ; a cutscene band's cell: noted for the next
+        cp MODE_SCREEN          ; build (scene_write), never queued, so none
+        jr nz, .plain           ; is lost or late
+        ld a, (scn_pbank)
+        or a
+        jr z, .plain
+        call scene_write
+        ret c
+.plain: ld a, (redraw_all)
         or a
         jr nz, .count
         push de
@@ -908,7 +916,7 @@ drain_queue:
 ; DE = cell (native row * 32 + column).
 draw_cell:
         ld a, (mode)            ; a cutscene band's cell (any native row: the
-        cp MODE_SCREEN          ; scroll brings them all in) is scene_mark's
+        cp MODE_SCREEN          ; scroll brings them all in) is scene.asm's
         jr nz, .noband
         ld a, (scn_pbank)
         or a
@@ -921,7 +929,7 @@ draw_cell:
         and $1F                 ; 31 - column
         sub b
         call in_band
-        jp c, scene_mark
+        ret c                   ; (scene_write took it at write time)
 .noband:
         ld a, e                 ; native row = cell >> 5
         and $E0

@@ -90,6 +90,7 @@ scn_ph:         ds 1            ; phase of the build (scroll & 7)
 scn_k:          ds 1            ; band row being built
 scn_fast:       ds 1            ; 8-byte groups the flush may still write back to back
 spr_new:        ds 1            ; the arcade copied new sprite data (opt_spr_copy)
+arc_idle:       ds 1            ; this NMI did not interrupt the arcade handler
 spr_cam:        ds 1            ; camera of the last sprite pass
 scn_flush2:     ds 1            ; a heavy build's colours and names are due
 scn_brow:       ds 1            ; next band row of the build under way (0 = none)
@@ -376,6 +377,11 @@ nmi:
         inc a
         ld (in_nmi), a
 
+        ld a, i                 ; P/V = IFF2: the arcade was not inside its
+        ld a, 0                 ; handler (idle loop or pathfinder), so its
+        jp po, .busy            ; video RAM holds one whole frame
+        inc a
+.busy:  ld (arc_idle), a
         call render
         call read_inputs
         xor a
