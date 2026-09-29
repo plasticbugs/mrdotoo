@@ -126,9 +126,10 @@ sprites_update:
         inc l                   ; position work: ~35% of entries in a
         and $7F                 ; chomper session are apples)
         cp APPLE_CODE
-        call z, apple_try
+        jr nz, .nap             ; (cp leaves carry for codes below it)
+        call apple_try
         jp c, .skip
-        ld a, (hl)              ; Y
+.nap:   ld a, (hl)              ; Y
         cpl
         sub 31                  ; screen x = 224 - Y
         jr c, .ec
