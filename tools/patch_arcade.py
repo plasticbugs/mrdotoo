@@ -240,6 +240,10 @@ OPT_SND_W2 = OPT_BASE + 12
 OPT_FILL_046C = OPT_BASE + 15
 OPT_ACTORS = OPT_BASE + 18
 OPT_ACTORS_RET = OPT_BASE + 21
+OPT_REQ0 = OPT_BASE + 24
+OPT_REQ1 = OPT_BASE + 27
+OPT_REQ2 = OPT_BASE + 30
+SND_REQ = 0x59CB        # src/opt.asm snd_req: in the ROM's $FF padding ($59CB-$5A7F)
 OPT_SCAN = [(0x420D, 0x41EC, 0x4211, OPT_BASE + 6, "alpha_advance: next object in state $98")]
 
 
@@ -338,18 +342,34 @@ def speed_patches():
     # the original three tests (opt_snd_slot). IX ends at $EC26 as before.
     assert ORIG[0x5A90:0x5AAF] == bytes.fromhex(
         "dd2100ec0626ddcb0056c4f65addcb0046c41d5bddcb004ec4f65add2310e7")
-    code = bytes([0x21, 0x00, 0x6C,                 # ld hl,$EC00 (CV $6C00)
+    # Requests are only ever set by the game's $02D9 (bit 0) and $02EA
+    # (bit 2) and the engine's $5C5D (bit 1); those now also set snd_req, and
+    # a tick with snd_req clear skips the scan (a request still pending after
+    # its slot was served keeps snd_req set: opt_snd_slot).
+    code = bytes([0x3A, SND_REQ & 0xFF, SND_REQ >> 8,  # ld a,(snd_req)
+                  0xB7,                             # or a
+                  0x28, 0x12,                       # jr z,done
+                  0xAF,                             # xor a
+                  0x32, SND_REQ & 0xFF, SND_REQ >> 8,  # ld (snd_req),a
+                  0x21, 0x00, 0x6C,                 # ld hl,$EC00 (CV $6C00)
                   0x06, 0x26,                       # ld b,$26
                   0x7E,                             # L: ld a,(hl)
                   0xE6, 0x07,                       # and 7
                   0xC4, OPT_SND_SLOT & 0xFF, OPT_SND_SLOT >> 8,   # call nz,opt_snd_slot
                   0x23,                             # inc hl
                   0x10, 0xF7,                       # djnz L
-                  0xDD, 0x21, 0x26, 0x6C,           # ld ix,$EC26
+                  0xDD, 0x21, 0x26, 0x6C,           # done: ld ix,$EC26
                   0x18])                            # jr $5AAF
+    assert code.index(bytes([0xDD, 0x21, 0x26, 0x6C])) == 6 + 0x12      # done
     code += bytes([0x5AAF - (0x5A90 + len(code) + 1)])
+    assert len(code) <= 0x5AAF - 0x5A90
     code += bytes([0x00] * (0x5AAF - 0x5A90 - len(code)))
-    put_bytes(0x5A90, code, "sound tick: fast idle-slot scan (opt_snd_slot)")
+    put_bytes(0x5A90, code, "sound tick: scan only after a request (snd_req), fast idle-slot scan (opt_snd_slot)")
+    for at, orig, entry, why in ((0x02E6, "cbc070c9", OPT_REQ0, "$02D9 set 0,b / ld (hl),b"),
+                                 (0x5C66, "cbcec9", OPT_REQ1, "$5C5D set 1,(hl)"),
+                                 (0x02F1, "cbd6c9", OPT_REQ2, "$02EA set 2,(hl)")):
+        assert ORIG[at:at + len(orig) // 2].hex() == orig
+        put_bytes(at, bytes([0xC3, entry & 0xFF, entry >> 8]), f"sound request {why} -> also sets snd_req")
     # $028B: after copying the queue to sprite RAM, the arcade zeroes Y in
     # every unused entry (~31 T each). No CPU code reads sprite RAM (MAME read
     # tap over 8000 frames of play), and the renderer stops at the first Y = 0,

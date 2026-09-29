@@ -18,6 +18,10 @@ opt_table:
         jp fill_046c            ; +15 video fill $046D (attr A, tile $29)
         jp opt_actors           ; +18 the handler's actor loop $00E9 (unrolled)
         jp opt_actors_ret       ; +21 its return point $0104
+        jp opt_req0             ; +24 $02E6 sound request bit 0 (game)
+        jp opt_req1             ; +27 $5C66 bit 1 (the engine)
+        jp opt_req2             ; +30 $02F1 bit 2 (game)
+
 
 ; Sound tick: HL -> a request-flag byte with bit 0, 1 or 2 set, B = the
 ; loop count. The original three tests, in their order, with IX = the byte
@@ -32,7 +36,12 @@ opt_snd_slot:
         call nz, $5B1D
         bit 1, (ix+0)
         call nz, $5AF6
-        pop hl
+        ld a, (ix+0)            ; still pending (not served this tick)? The
+        and 7                   ; next tick scans again
+        jr z, .done
+        ld a, 1
+        ld (snd_req), a
+.done:  pop hl
         ret
 
 ; The handler's sprite RAM copy, and a flag for sprites_update: vblanks with

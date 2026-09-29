@@ -31,6 +31,8 @@ snd_init:
         ld (snd_tvolc), a
         ld (snd_due), a
         ld (snd_busy), a
+        inc a                   ; the first tick scans the request slots
+        ld (snd_req), a         ; (opt.asm)
         ret
 
 ; The arcade's sound tick ($5A90, normally called by its vblank handler at
@@ -89,6 +91,27 @@ snd_nmi_tick:
         pop ix
         xor a
         ld (snd_busy), a
+        ret
+
+; The sound tick ($5A90) scans its 38 request slots only when a request was
+; posted since (snd_req, in the ROM's $FF padding; tools/patch_arcade.py
+; SND_REQ). The three places that set request bits also set it, with the
+; same register and flag results as the originals.
+snd_req         equ $59CB
+opt_req0:
+        set 0, b
+        ld (hl), b
+        jr opt_req
+opt_req1:
+        set 1, (hl)
+        jr opt_req
+opt_req2:
+        set 2, (hl)
+opt_req:
+        push af
+        ld a, 1
+        ld (snd_req), a
+        pop af
         ret
 
 ; rst $10: the arcade's `ld (bc),a` into a sound chip. Every register and
