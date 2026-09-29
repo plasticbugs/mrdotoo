@@ -43,57 +43,62 @@ apple_reset:
         ld (apl_inval), a
         ret
 
-; From the sprite pass (sprites.asm, .yok), for an apple-code sprite: A =
-; the sprite's screen y (its top line), HL -> its Y in sprite RAM, DE -> its
-; list slot (x stored at +1), B = early clock. Carry: a resting apple drawn
-; as tiles (left out of the sprite list). Preserves DE, HL; clobbers BC.
-; An apple tiled last pass at the same place and list index skips the dirt
-; check unless one of the tiled apples' cells has been drawn since
-; (apple_at sets apl_inval: the renderer redraws every cell the arcade
-; writes, so a change under an apple always passes there).
+; From the sprite pass (sprites.asm, .nb), for an apple-code sprite, before
+; its position is worked out: HL -> its Y in sprite RAM, DE -> its list slot.
+; Carry: a resting apple drawn as tiles (left out of the sprite list).
+; Preserves DE, HL; clobbers AF, BC.
+; On the grid and inside the playfield, from the raw entry: screen x =
+; 224 - Y (tile column 28 - Y / 8), screen y = spr_ybase - X (list row =
+; screen row + cam = 30 - X / 8). An apple tiled last pass at the same place
+; and list index skips the dirt check unless one of the tiled apples' cells
+; has been drawn since (apple_at sets apl_inval: the renderer redraws every
+; cell the arcade writes, so a change under an apple always passes there).
         assert high apl_new == high (apl_cur + 2 * APL_MAX)
 apple_try:
-        push af
         ld a, (mode)
         cp MODE_PLAYFIELD
         jr nz, .no
-        ld a, b
-        or a
-        jr nz, .no              ; (left of the screen)
         inc l
         ld a, (hl)              ; colour line 5, not flipped
         dec l
         and $3F
         cp APPLE_LINE
         jr nz, .no
-        pop af
-        push af
+        ld a, (hl)              ; Y
         ld c, a
         and 7
         jr nz, .no              ; not on the grid
         ld a, c
-        cp 177
-        jr nc, .no              ; (its lower cells below the playfield)
-        rrca                    ; (low 3 bits clear: exactly y / 8)
-        rrca
-        rrca
-        ld b, a
-        ld a, (cam)             ; rows are kept camera-free (+ cam): a camera
-        add a, b                ; move in the same vblank then cannot shift
-        ld b, a                 ; a tiled apple by a row. B = list row
-        inc e
-        ld a, (de)              ; x
-        dec e
-        ld c, a
-        and 7
-        jr nz, .no
-        ld a, c
-        cp 177
+        cp 48                   ; screen x = 224 - Y in 0-176
+        jr c, .no
+        cp 225
         jr nc, .no
         rrca
         rrca
         rrca
+        neg
+        add a, 28
         ld c, a                 ; C = tx
+        inc l
+        inc l
+        ld a, (hl)              ; X
+        dec l
+        dec l
+        ld b, a
+        and 7
+        jr nz, .no
+        ld a, (spr_ybase)       ; screen y = spr_ybase - X in 0-176 (its lower
+        sub b                   ; cells inside the playfield)
+        jr c, .no
+        cp 177
+        jr nc, .no
+        ld a, b
+        rrca
+        rrca
+        rrca
+        neg
+        add a, 30
+        ld b, a                 ; B = list row (screen row + cam)
         push hl
         ld a, (apl_new_n)
         cp APL_MAX
@@ -134,12 +139,10 @@ apple_try:
         inc l
         ld (hl), b
         pop hl
-        pop af
         scf
         ret
 .no2:   pop hl
-.no:    pop af
-        or a
+.no:    or a
         ret
 
 ; B = list row (screen row + cam), C = tx: Z if the 4 cells are plain dirt

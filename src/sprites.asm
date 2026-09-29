@@ -121,7 +121,14 @@ sprites_update:
         and 3
         dec a
         jp nz, .skip
-.nb:    ld a, (hl)              ; Y
+.nb:    dec l                   ; a resting apple drawn as tiles? (apples.asm;
+        ld a, (hl)              ; checked from the raw entry, before the
+        inc l                   ; position work: ~35% of entries in a
+        and $7F                 ; chomper session are apples)
+        cp APPLE_CODE
+        call z, apple_try
+        jp c, .skip
+        ld a, (hl)              ; Y
         cpl
         sub 31                  ; screen x = 224 - Y
         jr c, .ec
@@ -150,18 +157,7 @@ sprites_update:
         jr .yok
 .yneg:  cp -15
         jp c, .top
-.yok:   ld c, a                 ; an apple? (code check here: the call
-        dec l                   ; for every sprite cost ~3k T a vblank)
-        ld a, (hl)
-        inc l
-        and $7F
-        cp APPLE_CODE
-        ld a, c
-        jr nz, .noapl
-        call apple_try          ; a resting apple drawn as tiles?
-        jp c, .skip             ; (apples.asm)
-.noapl:
-        dec a                   ; the TMS9918 draws one line below Y
+.yok:   dec a                   ; the TMS9918 draws one line below Y
         cp SAT_END
         jp z, .skip
         ld (de), a              ; y
