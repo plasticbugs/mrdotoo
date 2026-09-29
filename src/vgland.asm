@@ -81,6 +81,12 @@ vgl_check:
         ld a, (scn_base)
         add a, 2*SCN_SLOTS
         ld (vgl_base), a
+        xor a                   ; no merged icon tiles loaded
+        ld hl, vgl_mk
+        ld b, 6
+.mk:    ld (hl), a
+        inc hl
+        djnz .mk
         ld a, 1
         ld (vgl_on), a
 .z:     xor a
@@ -419,30 +425,56 @@ vgl_hide:
 ; The arcade's round-end icons: one sprite per SCENE line, the reason the
 ; round ended ($2D creep, $6E cherries, $69 diamond, $51 letter monster).
 ; The romhack's 2 x 3 tile icon for it goes into both name tables at the
-; sprite's place (col = x / 8, rows from (y + 4) / 8 - 1: centred on the
+; sprite's place (col = x / 8 + 1, rows from (y + 4) / 8 - 1: centred on the
 ; line), and its black overlay sprite (cherries, creep) into SAT entries
-; 10-12, then the end. Every vblank: full redraws and flips may repaint the
-; cells. Clobbers everything.
+; 10-12, then the end. The lines are 16 px apart, the icons 24 px tall: an
+; icon's bottom tile row shares its cells with the next one's top row. Their
+; pixels never share a line (tops use lines 4-7, bottoms 0-1), so such a cell
+; gets a merged tile (patterns ORed, each line's colour from the tile that
+; has pixels there) in codes scn_base + VGL_MRG.. (bank 0 slots the letter
+; monster never reaches), uploaded when the pair changes. Every vblank: full
+; redraws and flips may repaint the cells. Clobbers everything.
+VGL_MRG         equ SCN_SLOTS - 6   ; 6 merged tiles: slot = upper icon * 2 + col
+VGL_ZERO        equ VGL_DATA + $B20 ; 8 zero bytes (and colours at + $200)
+vgl_ic          equ vgl_on + 32     ; icons this vblank: count, (row, col, reason) x 3
+vgl_mk          equ vgl_on + 42     ; merged tile per slot: its key (0: none) x 6
+vgl_ti          equ vgl_on + 48     ; the icon being drawn: index,
+vgl_tr          equ vgl_on + 49     ;   top row,
+vgl_tc          equ vgl_on + 50     ;   column,
+vgl_tn          equ vgl_on + 51     ;   reason,
+vgl_tk          equ vgl_on + 52     ;   tile row 0-2,
+vgl_t0          equ vgl_on + 53     ;   its two codes
+        assert vgl_t0 + 1 < $2F00
+        assert high vgl_ic == high (vgl_ic + 9) && high vgl_mk == high (vgl_mk + 5)
         assert high ARC_SPRITES == high (ARC_SPRITES + 127)
 vgl_icons:
+        xor a
+        ld (vgl_ic), a
         ld hl, ARC_SPRITES
         ld b, 32
-.n:     push bc
+.c:     push bc
         push hl
-        call vgl_icon           ; A = reason 0-3 (carry: none), D = row, E = col
-        jr c, .nx
-        ld c, a                 ; names: VGL_IMAP + reason * 6
+        call vgl_icon           ; A = reason, D = row, E = col (carry: none)
+        jr c, .cx
+        ld c, a
+        ld a, (vgl_ic)
+        cp 3
+        jr nc, .cx
+        ld b, a
+        inc a
+        ld (vgl_ic), a
+        ld a, b
         add a, a
-        add a, c
-        add a, a
-        ld hl, VGL_IMAP
-        add a, l
+        add a, b
+        add a, low (vgl_ic + 1)
         ld l, a
-        ld a, (pnt_front)
-        call .tab
-        ld a, (pnt_back)
-        call .tab
-.nx:    pop hl
+        ld h, high vgl_ic
+        ld (hl), d
+        inc l
+        ld (hl), e
+        inc l
+        ld (hl), c
+.cx:    pop hl
         pop bc
         inc l                   ; (ARC_SPRITES + 128 stays in one page)
         inc l
@@ -452,16 +484,38 @@ vgl_icons:
         ld a, (hl)
         dec l
         or a
+        jr z, .names
+        djnz .c
+.names: ld a, (vgl_ic)
+        or a
         jr z, .sat
-        djnz .n
+        ld b, a
+        ld c, 0
+        ld hl, vgl_ic + 1
+.i:     push bc
+        push hl
+        call vgl_idraw
+        pop hl
+        pop bc
+        inc l
+        inc l
+        inc l
+        inc c
+        djnz .i
 .sat:   ld hl, VR_SAT + 40      ; the overlays
         call vdp_set_write
-        ld hl, ARC_SPRITES
-        ld b, 32
+        ld a, (vgl_ic)
+        or a
+        jr z, .end
+        ld b, a
+        ld hl, vgl_ic + 1
 .s:     push bc
         push hl
-        call vgl_icon
-        jr c, .sx
+        ld d, (hl)              ; row
+        inc l
+        ld e, (hl)              ; col
+        inc l
+        ld a, (hl)              ; reason
         add a, a                ; VGL_IOV + reason * 2
         ld hl, VGL_IOV
         add a, l
@@ -493,61 +547,281 @@ vgl_icons:
         out (VDP_DATA), a
 .sx:    pop hl
         pop bc
-        ld de, 4
-        add hl, de
         inc l
-        ld a, (hl)
-        dec l
-        or a
-        jr z, .end
+        inc l
+        inc l
         djnz .s
 .end:   ld a, SAT_END
         out (VDP_DATA), a
         ret
-; A = name table high byte, HL -> the icon's 6 names, D = row, E = col:
-; its 3 rows of 2. Preserves HL, DE.
-.tab:   push hl
-        push de
-        ld c, a
-        ld b, 3
-.r:     push bc
-        push hl
-        ld l, d                 ; table + row * 32 + col
+
+; HL -> an icon list entry, C = its index: its 3 rows of 2 names into both
+; name tables.
+vgl_idraw:
+        ld a, c
+        ld (vgl_ti), a
+        ld a, (hl)
+        ld (vgl_tr), a
+        inc l
+        ld a, (hl)
+        ld (vgl_tc), a
+        inc l
+        ld a, (hl)
+        ld (vgl_tn), a
+        xor a
+.r:     ld (vgl_tk), a
+        ld c, 0
+        call vgl_icode
+        ld (vgl_t0), a
+        ld c, 1
+        call vgl_icode
+        ld (vgl_t0 + 1), a
+        ld a, (pnt_front)
+        call .tab
+        ld a, (pnt_back)
+        call .tab
+        ld a, (vgl_tk)
+        inc a
+        cp 3
+        jr c, .r
+        ret
+.tab:   ld c, a                 ; table + (row + k) * 32 + col
+        ld a, (vgl_tr)
+        ld hl, vgl_tk
+        add a, (hl)
+        ld l, a
         ld h, 0
         add hl, hl
         add hl, hl
         add hl, hl
         add hl, hl
         add hl, hl
-        ld a, l
-        or e
+        ld a, (vgl_tc)
+        or l
         ld l, a
         ld a, h
         add a, c
         ld h, a
         call vdp_set_write
-        pop hl
-        call .nm
+        ld hl, vgl_t0
+        ld a, (hl)
+        out (VDP_DATA), a
         inc hl
-        push hl                 ; (spacing)
-        pop hl
-        call .nm
-        inc hl
-        pop bc
-        inc d
-        djnz .r
-        pop de
-        pop hl
-        ret
-.nm:    ld a, (hl)              ; icon tile index + 1 (0 = black)
-        or a
-        jr z, .o
-        add a, low (-VGL_ICONS - 1)
         push hl
+        pop hl
+        ld a, (hl)
+        nop
+        out (VDP_DATA), a
+        ret
+
+; C = column 0/1 of tile row vgl_tk of the icon being drawn: A = its code
+; (a merged one where another icon's row shares the cell). Preserves C.
+vgl_icode:
+        ld a, (vgl_tk)
+        cp 2
+        jr z, .bot
+        or a
+        jr nz, .plain
+        ld a, (vgl_tr)          ; top row: an icon 2 rows up in this column?
+        sub 2
+        call vgl_find           ; -> B = its index, A = its reason
+        jr c, .plain
+        ld d, a                 ; D = upper reason
+        ld a, (vgl_tn)
+        ld e, a                 ; E = lower reason
+        jr .mrg
+.bot:   ld a, (vgl_tr)          ; bottom row: an icon 2 rows down?
+        add a, 2
+        call vgl_find
+        jr c, .plain
+        ld e, a
+        ld a, (vgl_tn)
+        ld d, a
+        ld a, (vgl_ti)
+        ld b, a
+.mrg:   ld a, b                 ; slot = upper icon * 2 + col
+        add a, a
+        add a, c
+        jp vgl_merge
+.plain: ld a, (vgl_tn)          ; VGL_IMAP + reason * 6 + row * 2 + col
+        ld b, a
+        add a, a
+        add a, b
+        add a, a
+        ld b, a
+        ld a, (vgl_tk)
+        add a, a
+        add a, b
+        add a, c
+        ld hl, VGL_IMAP
+        add a, l
+        ld l, a
+        ld a, (hl)              ; icon tile index + 1 (0 = black)
+        or a
+        ret z
+vgl_itile:                      ; icon tile index + 1 -> its code
+        add a, low (-VGL_ICONS - 1)
         ld hl, vgl_base
         add a, (hl)
+        ret
+
+; A = row: the icon whose top row that is, in column vgl_tc: B = its index,
+; A = its reason; carry if none. Preserves C.
+vgl_find:
+        ld d, a
+        ld a, (vgl_tc)
+        ld e, a
+        ld a, (vgl_ic)
+        or a
+        scf
+        ret z
+        ld b, 0
+        ld hl, vgl_ic + 1
+.f:     ld a, (hl)
+        cp d
+        jr nz, .n
+        inc l
+        ld a, (hl)
+        dec l
+        cp e
+        jr nz, .n
+        inc l
+        inc l
+        ld a, (hl)
+        or a
+        ret
+.n:     inc l
+        inc l
+        inc l
+        inc b
+        ld a, (vgl_ic)
+        cp b
+        jr nz, .f
+        scf
+        ret
+
+; A = merged slot, D = upper icon's reason, E = lower's, C = column: A =
+; the merged tile's code, uploaded if that slot held another pair.
+; Preserves C.
+vgl_merge:
+        push bc
+        ld b, a
+        ld a, d                 ; key = upper * 8 + lower * 2 + col + 1
+        add a, a
+        add a, a
+        add a, a
+        ld l, a
+        ld a, e
+        add a, a
+        add a, l
+        add a, c
+        inc a
+        ld l, a
+        ld a, b
+        add a, low vgl_mk
+        ld b, l
+        ld l, a
+        ld h, high vgl_mk
+        ld a, b
+        cp (hl)
+        jr z, .have
+        ld (hl), a
+        ld a, l                 ; the slot again
+        sub low vgl_mk
+        push af
+        ld a, d                 ; bottom row of the upper icon
+        add a, a
+        add a, d
+        add a, a
+        add a, 4
+        add a, c
+        call .src
+        push hl
+        ld a, e                 ; top row of the lower icon
+        add a, a
+        add a, e
+        add a, a
+        add a, c
+        call .src
+        pop de                  ; DE = upper's bottom tile, HL = lower's top
+        pop af
+        push af
+        push hl
+        call .code
+        ld l, a                 ; VRAM = code * 8
+        ld h, 0
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        push hl
+        call vdp_set_write
+        pop bc
         pop hl
-.o:     out (VDP_DATA), a
+        push de
+        push hl
+        push bc
+        ld b, 8
+.p:     ld a, (de)              ; patterns ORed
+        or (hl)
+        out (VDP_DATA), a
+        inc de
+        inc hl
+        djnz .p
+        pop hl                  ; colours
+        ld a, h
+        add a, high VR_CT
+        ld h, a
+        call vdp_set_write
+        pop hl
+        pop de
+        ld b, 8
+.cl:    ld a, (de)              ; the line's colour: the tile with pixels
+        or a
+        jr z, .ct
+        inc d
+        inc d
+        ld a, (de)
+        dec d
+        dec d
+        jr .co
+.ct:    inc h
+        inc h
+        ld a, (hl)
+        dec h
+        dec h
+.co:    out (VDP_DATA), a
+        inc de
+        inc hl
+        djnz .cl
+        pop af
+        jr .out
+.have:  ld a, l
+        sub low vgl_mk
+.out:   call .code
+        pop bc
+        ret
+.code:  add a, VGL_MRG          ; slot -> code
+        ld hl, scn_base
+        add a, (hl)
+        ret
+; A = VGL_IMAP offset: HL -> that tile's 8 pattern bytes (colours + $200).
+.src:   ld hl, VGL_IMAP
+        add a, l
+        ld l, a
+        ld a, (hl)
+        or a
+        ld hl, VGL_ZERO
+        ret z
+        dec a
+        ld l, a
+        ld h, 0
+        add hl, hl
+        add hl, hl
+        add hl, hl
+        push de
+        ld de, VGL_IPT
+        add hl, de
+        pop de
         ret
 
 ; HL -> a sprite RAM entry (code, Y, colour, X): an icon? A = reason 0-3,
