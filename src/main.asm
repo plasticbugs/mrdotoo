@@ -107,6 +107,7 @@ snd_mix:        ds 1            ;   AY mixer
 snd_nvol2:      ds 1            ;   chip 2 noise volume (AY scale)
 snd_tvolc:      ds 1            ;   chip 2 tone 2 volume (AY scale)
 snd_due:        ds 1            ;   sound ticks owed (one per vblank)
+snd_busy:       ds 1            ;   a tick is running (sound.asm: not re-entrant)
 up_hold:        ds 1            ; vblanks a tile-set change has waited (render.asm)
 hud_p:          ds 1            ; hud.asm: panel cell being written
 plate_want:     ds 1            ;   dessert the playfield shows ($FF: none yet)
@@ -423,11 +424,11 @@ nmi:
         jp po, .busy            ; video RAM holds one whole frame
         inc a
 .busy:  ld (arc_idle), a
+        ifndef VALIDATE
+        call snd_sched          ; the sound tick first: on time even when the
+        endif                   ; drawing below runs long (sound.asm)
         call render
         call read_inputs
-        ifndef VALIDATE
-        call snd_nmi_tick
-        endif
         xor a
         ld (in_nmi), a
         call late_ack           ; a vblank arrived while we worked: its ack
@@ -466,6 +467,9 @@ nmi:
 
 .late:  ld a, 1
         ld (nmi_late), a
+        ifndef VALIDATE
+        call snd_sched          ; (our drawing overran: the tick still runs)
+        endif
 .nested:
         pop hl
         pop de

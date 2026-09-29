@@ -30,16 +30,35 @@ snd_init:
         ld (snd_nvol2), a
         ld (snd_tvolc), a
         ld (snd_due), a
+        ld (snd_busy), a
         ret
 
 ; The arcade's sound tick ($5A90, normally called by its vblank handler at
 ; $00D2, patched out) runs from our NMI instead: once per vblank, so music and
 ; effects keep time when the game logic falls behind (a heavy round, a long
-; screen fill). Safe against the interrupted arcade code: the game only posts
-; requests ($02D9 / $02EA: one store each), and every chip write is inside
-; the tick. Ticks missed while our NMI work overran are caught up (up to 3).
+; screen fill). snd_sched runs it at the start of every NMI, before the
+; drawing, and also in a nested NMI when our drawing overran a frame (a tile
+; set upload plus a full redraw at a round's start or a chomper session's):
+; with the tick after the drawing those vblanks lost their tick and caught up
+; in a burst (the round-start hitch). Safe against the interrupted arcade
+; code: the game only posts requests ($02D9 / $02EA: one store each), and
+; every chip write is inside the tick. Ticks owed are caught up (up to 3).
 SND_TICK        equ $5A90
+snd_sched:
+        ld a, (cur_bank)        ; (a nested NMI may find another bank mapped)
+        push af
+        ld a, ARC_HI_BANK       ; the engine's data ($6000-$7FFF)
+        call select_bank
+        call snd_nmi_tick
+        pop af
+        jp select_bank
+
+; Runs the owed ticks. Not re-entrant: an NMI arriving during one leaves its
+; tick owed, and this loop takes it. Clobbers AF, BC, DE, HL.
 snd_nmi_tick:
+        ld a, (snd_busy)
+        or a
+        ret nz
         ld hl, (irq_count)      ; not before the arcade has initialised its
         ld a, h                 ; sound RAM (its first handler)
         or l
@@ -51,7 +70,9 @@ snd_nmi_tick:
         jr c, .n
         ld a, 3
         ld (snd_due), a
-.n:     push ix
+.n:     ld a, 1
+        ld (snd_busy), a
+        push ix
         push iy
         ex af, af'              ; the engine uses AF'
         push af
@@ -66,6 +87,8 @@ snd_nmi_tick:
         ex af, af'
         pop iy
         pop ix
+        xor a
+        ld (snd_busy), a
         ret
 
 ; rst $10: the arcade's `ld (bc),a` into a sound chip. Every register and
