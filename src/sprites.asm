@@ -478,10 +478,11 @@ sprites_prio:
         inc l                   ; pinned (colour bit 6): goes out first
         inc l
         inc l
-        bit 6, (hl)
+        ld a, (hl)
         dec l
         dec l
         dec l
+        and $40                 ; (after the decs: they change Z)
         jr nz, .nx
         ld a, (hl)              ; crowded if one of its bands holds 5+
         add a, 17
