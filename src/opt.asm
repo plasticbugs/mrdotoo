@@ -16,6 +16,8 @@ opt_table:
         jp snd_w1               ; +9 ld ($9801),a at $5AE7 (sound.asm)
         jp snd_w2               ; +12 ld ($9802),a at $5AEE
         jp fill_046c            ; +15 video fill $046D (attr A, tile $29)
+        jp opt_actors           ; +18 the handler's actor loop $00E9 (unrolled)
+        jp opt_actors_ret       ; +21 its return point $0104
 
 ; Sound tick: HL -> a request-flag byte with bit 0, 1 or 2 set, B = the
 ; loop count. The original three tests, in their order, with IX = the byte
