@@ -28,7 +28,10 @@ slot_frame      equ $5980       ; sprite cache: frame each slot was last used
 spr_list        equ $5880       ; this frame's sprites: 32 x [y, x, name, colour]
 band_cnt        equ $56B0       ; sprites per 8-line band (30)
 CROWD_MAX       equ 20
-        assert band_cnt + 30 <= dirty_q
+unc_n           equ $56CE       ; uncrowded sprites of a crowded pass
+hud_mk          equ $56CF       ; sprite pass: Y of the EXTRA marker sprite (0: none)
+unc_idx         equ $56D0       ;   their spr_list offsets (32)
+        assert band_cnt + 30 <= unc_n && unc_idx + 32 <= dirty_q
 ARC_HI_BANK     equ 0           ; arcade $6000-$7FFF, mapped at $C000 while it runs
 ARC_LO_BANK     equ 1           ; arcade $0000-$5FFF in 8KB pieces, banks 1-3
 ; Reading $FFC0-$FFFF switches MegaCart banks, so no bank may keep data in its

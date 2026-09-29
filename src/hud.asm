@@ -288,25 +288,10 @@ plate_load:
 ; changes, redraw the old and the new letter. Playfield mode.
 ; Clobbers everything.
 hud_scan:
-        ld hl, ARC_WORK + $312
-        ld b, 40
-.e:     inc hl
-        ld a, (hl)              ; Y (0 ends the queue)
-        or a
-        jr z, .none
-        inc hl
-        ld c, (hl)              ; colour
-        inc hl
-        ld d, a
-        ld a, (hl)              ; X
-        inc hl
-        cp $E9
-        jr nz, .n
-        ld a, c
-        and $0F
-        cp 4
-        jr nz, .n
-        ld a, d                 ; letter = ($A0 - Y) / 12
+        ld a, (hud_mk)          ; the marker's Y, found by the sprite pass
+        or a                    ; (sprites.asm; scanning the queue here cost
+        jr z, .none             ; ~1.5k T a vblank)
+        ld d, a                 ; letter = ($A0 - Y) / 12
         ld c, $A0
         ld e, 0
 .l:     cp c
@@ -319,7 +304,6 @@ hud_scan:
         inc e
         bit 3, e                ; (never more than 5 steps: stop at 8)
         jr z, .l
-.n:     djnz .e
 .none:  ld e, $FF
 .got:   ld a, (hud_next)
         cp e

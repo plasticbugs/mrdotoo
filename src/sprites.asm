@@ -68,11 +68,15 @@ sprites_update:
         jr nz, .new
         ld a, (crowd_last)      ; a crowded screen rotates every vblank even
         or a                    ; when the arcade lags (else a sprite on a
-        ret z                   ; hidden turn stayed hidden for the stall)
+        ret z                   ; hidden turn stayed hidden for the stall);
+        ld a, SPR_BANK_A        ; the list and its split stand: only the
+        call select_bank        ; output (a fraction of a full pass; chomper
+        jp spr_emit             ; sessions lag most)
 .new:   ld a, (cam)
         ld (spr_cam), a
         xor a
         ld (spr_new), a
+        ld (hud_mk), a
         ld a, SPR_BANK_A
         call select_bank
         exx                     ; the arcade uses the alternate set too
@@ -145,7 +149,7 @@ sprites_update:
         jp nc, .skip
         jr .yok
 .yneg:  cp -15
-        jp c, .skip
+        jp c, .top
 .yok:   ld c, a                 ; an apple? (code check here: the call
         dec l                   ; for every sprite cost ~3k T a vblank)
         ld a, (hl)
@@ -221,7 +225,8 @@ sprites_update:
         ld a, (bc)              ; colour | pinned
         bit 6, a
         call nz, spr_pin        ; remember pinned entries (Mr. Do)
-        and $0F
+        and $4F                 ; (pinned stays in bit 6: the TMS9918
+                                ; ignores bits 4-6 of the SAT colour byte)
         ld b, a
         ld a, (spr_ec)
         or b
@@ -291,6 +296,26 @@ spr_term:
         ld a, SAT_END
         out (VDP_DATA), a
         ret
+
+; Above the window: the HUD's EXTRA marker (X $E9, colour line 4; always
+; above: y = 240 - cam * 8 - $E9 < -15)? Its Y for hud_scan. HL -> Y.
+sprites_update.top:
+        inc l
+        inc l
+        ld a, (hl)              ; X
+        dec l
+        cp $E9
+        jr nz, .no
+        ld a, (hl)              ; colour line
+        and $0F
+        cp 4
+        jr nz, .no
+        dec l
+        ld a, (hl)              ; Y
+        ld (hud_mk), a
+        jp sprites_update.skip
+.no:    dec l
+        jp sprites_update.skip
 
 ; SAT write address, count 0, then an overlay sprite with Mr. Do's white
 ; pixels in front of (before) each pinned Mr. Do entry that has any. The
@@ -440,28 +465,24 @@ sprites_update.crowded:
         ld a, 1
         ld (crowd_last), a
         ; fall through
-; A crowded frame: pinned first, uncrowded next, the crowded ones rotated.
+; A crowded frame: the list split into uncrowded and crowded (kept for the
+; vblanks until the arcade's next sprite data), then spr_emit.
 sprites_prio:
-        call sat_begin          ; 0: Mr. Do's overlays
-        ld a, (pin_n)           ; 1: pinned
-        or a
-        jr z, .p2
-        ld b, a
-        ld de, pin_list
-.pin:   ld a, (de)
-        ld l, a
-        ld h, high spr_list
-        call spr_out4
-        inc e
-        djnz .pin
-.p2:    xor a                   ; 2: uncrowded out, crowded collected
+        xor a
         ld (crowd_n), a
+        ld (unc_n), a
         ld hl, spr_list
 .ent:   ld a, (spr_end)
         cp l
-        jr z, .p3
-        call spr_is_pinned
-        jr z, .nx               ; already out
+        jr z, spr_emit
+        inc l                   ; pinned (colour bit 6): goes out first
+        inc l
+        inc l
+        bit 6, (hl)
+        dec l
+        dec l
+        dec l
+        jr nz, .nx
         ld a, (hl)              ; crowded if one of its bands holds 5+
         add a, 17
         rrca
@@ -482,14 +503,21 @@ sprites_prio:
         ld a, (de)
         cp 5
         jr nc, .crowd
-        call spr_out4
+.unc:   ld a, (unc_n)           ; uncrowded
+        ld e, a
+        inc a
+        ld (unc_n), a
+        ld a, e
+        add a, low unc_idx
+        ld e, a
+        ld d, high unc_idx
+        ld a, l
+        ld (de), a
         jr .nx
 .crowd: ld a, (crowd_n)
         cp CROWD_MAX
-        jr c, .keep
-        call spr_out4           ; list full: this one just goes out in order
-        jr .nx
-.keep:  ld e, a
+        jr nc, .unc             ; list full: this one just goes out in order
+        ld e, a
         inc a
         ld (crowd_n), a
         ld a, e
@@ -502,7 +530,34 @@ sprites_prio:
         add a, 4
         ld l, a
         jr .ent
-.p3:    ld a, (crowd_n)         ; 3: crowded, rotated three places per frame
+
+; Mr. Do's overlays, the pinned, the uncrowded, then the crowded ones
+; rotated three places per call.
+spr_emit:
+        call sat_begin
+        ld a, (pin_n)
+        or a
+        jr z, .p2
+        ld b, a
+        ld de, pin_list
+.pin:   ld a, (de)
+        ld l, a
+        ld h, high spr_list
+        call spr_out4
+        inc e
+        djnz .pin
+.p2:    ld a, (unc_n)
+        or a
+        jr z, .p3
+        ld b, a
+        ld de, unc_idx
+.un:    ld a, (de)
+        ld l, a
+        ld h, high spr_list
+        call spr_out4
+        inc e
+        djnz .un
+.p3:    ld a, (crowd_n)         ; crowded, rotated three places per frame
         or a
         jp z, spr_term
         ld b, a
@@ -546,29 +601,6 @@ sprites_prio:
         ld c, 0
 .rnx:   djnz .rot
         jp spr_term
-
-; HL -> spr_list entry. Z = it is in pin_list. Preserves BC, DE, HL.
-spr_is_pinned:
-        ld a, (pin_n)
-        or a
-        jr z, .no
-        push bc
-        push de
-        ld b, a
-        ld de, pin_list
-.c:     ld a, (de)
-        cp l
-        jr z, .yes
-        inc e
-        djnz .c
-        pop de
-        pop bc
-.no:    or 1                    ; NZ
-        ret
-.yes:   pop de
-        pop bc
-        xor a                   ; Z
-        ret
 
 ; HL -> spr_list entry: write its four SAT bytes >= 30 T apart (safe outside
 ; vblank). Preserves HL.
