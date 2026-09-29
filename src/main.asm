@@ -927,6 +927,7 @@ font_len equ $-font
         include "build/tiles/hud.inc"
 
         include "build/opt_actors.inc"  ; (opt.asm: the handler's actor loop)
+        include "opt_fill.asm"
         assert $ <= OPT_BASE
         ds OPT_BASE-$, $FF
         include "opt.asm"

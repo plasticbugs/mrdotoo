@@ -13,14 +13,15 @@ opt_table:
         jp opt_snd_slot         ; +0 sound tick $5A90
         jp opt_spr_copy         ; +3 the handler's sprite RAM copy ($00C8)
         jp opt_next_98          ; +6 alpha_advance loop tail $420D
-        jp snd_w1               ; +9 ld ($9801),a at $5AE7 (sound.asm)
-        jp snd_w2               ; +12 ld ($9802),a at $5AEE
+        jp snd_sil1             ; +9 ld ($9801),a at $5AE7 (sound.asm)
+        jp snd_sil2             ; +12 ld ($9802),a at $5AEE
         jp fill_046c            ; +15 video fill $046D (attr A, tile $29)
         jp opt_actors           ; +18 the handler's actor loop $00E9 (unrolled)
         jp opt_actors_ret       ; +21 its return point $0104
         jp opt_req0             ; +24 $02E6 sound request bit 0 (game)
         jp opt_req1             ; +27 $5C66 bit 1 (the engine)
         jp opt_req2             ; +30 $02F1 bit 2 (game)
+        jp snd_chout            ; +33 the engine's per-channel output $5C0F
 
 
 ; Sound tick: HL -> a request-flag byte with bit 0, 1 or 2 set, B = the
@@ -81,112 +82,3 @@ opt_next_98:                    ; alpha_advance ($41D6): state == $98
         pop hl
         jp $41EC
 
-; Video fill $046D (entered at $046C after `xor a`, or at $046D by $7076):
-; C rows of B cells from DE (0 = 256): attribute A at DE, tile $29 at
-; DE+$400. Through the video hooks each cell costs ~500 T; the coin-up screen
-; clear (1024 + 768 cells) kept the arcade busy for 33 frames. Same loop, same
-; pushes, same exit registers and flags; only the stores differ. A fill of
-; 8x8+ cells inside video RAM stores directly and asks for a full redraw
-; (what the dirty queue overflowing does anyway), holding the renderer off
-; (q_busy) until the last row. Other fills, and any fill while a cutscene
-; band is live (its cells go to scene_write), take the hooks.
-fill_046c:
-        push af
-        call fill_fast
-        jr nz, .hooked
-        pop af
-.row:   push bc
-        push de
-        ld hl, $0400
-        add hl, de
-.cell:  ld (de), a
-        ld (hl), $29
-        inc de
-        inc hl
-        djnz .cell
-        pop de
-        ld hl, redraw_all       ; a bulk repaint under way: redraw once it ends
-        ld (hl), 1
-        ld hl, q_busy
-        ld (hl), $FF
-        ld hl, $0020
-        add hl, de
-        ex de, hl
-        pop bc
-        dec c
-        jr nz, .row
-        ret
-.hooked:
-        pop af
-.hrow:  push bc
-        push de
-        ld hl, $0400
-        add hl, de
-.hcell: rst $28                 ; ld (de),a
-        rst $30                 ; ld (hl),$29
-        db $29
-        inc de
-        inc hl
-        djnz .hcell
-        pop de
-        ld hl, $0020
-        add hl, de
-        ex de, hl
-        pop bc
-        dec c
-        jr nz, .hrow
-        ret
-
-; Z = fill_046c may store directly. Clobbers AF, HL.
-fill_fast:
-        ld a, (mode)
-        cp MODE_SCREEN
-        jr nz, .m
-        ld a, b                 ; a screen being wiped whole (32 columns, 24+
-        cp 32                   ; rows: the arcade clearing it for what comes
-        jr nz, .band            ; next)? The display goes black until the next
-        ld a, c                 ; tile set is up (render_body, go_black), so
-        cp 24                   ; the band no longer matters
-        jr c, .band
-        ld a, 1
-        ld (blank_req), a
-        jr .m
-.band:  ld a, (scn_pbank)
-        or a
-        ret nz
-.m:     ld a, b                 ; 8+ columns and 8+ rows (0 = 256)
-        dec a
-        cp 7
-        jr c, .no
-        ld a, c
-        dec a
-        cp 7
-        jr c, .no
-        ld a, d                 ; starts in video RAM ($7000-)
-        cp $70
-        jr c, .no
-        ld a, c                 ; last tile store = DE + $400 + (C-1)*32 + B-1
-        dec a
-        ld l, a
-        ld h, 0
-        add hl, hl
-        add hl, hl
-        add hl, hl
-        add hl, hl
-        add hl, hl
-        ld a, b
-        dec a
-        add a, l
-        ld l, a
-        adc a, h
-        sub l
-        ld h, a
-        add hl, de
-        jr c, .no
-        ld a, h                 ; ... <= $7FFF
-        cp $7C
-        jr nc, .no
-        xor a
-        ret
-.no:    or 1
-        ret

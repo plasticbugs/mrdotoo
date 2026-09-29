@@ -244,6 +244,7 @@ OPT_REQ0 = OPT_BASE + 24
 OPT_REQ1 = OPT_BASE + 27
 OPT_REQ2 = OPT_BASE + 30
 SND_REQ = 0x59CB        # src/opt.asm snd_req: in the ROM's $FF padding ($59CB-$5A7F)
+OPT_CHOUT = OPT_BASE + 33
 OPT_SCAN = [(0x420D, 0x41EC, 0x4211, OPT_BASE + 6, "alpha_advance: next object in state $98")]
 
 
@@ -257,6 +258,13 @@ def sound_patches():
     for a, entry, chip in ((0x5AE7, OPT_SND_W1, 1), (0x5AEE, OPT_SND_W2, 2)):
         assert ORIG[a:a + 3] == bytes([0x32, 0x00 + chip, 0x98])
         put_bytes(a, bytes([0xCD, entry & 0xFF, entry >> 8]), f"ld ($980{chip}),a -> call snd_w{chip}")
+    # The engine's per-channel output ($5C0E-$5C53: 2-3 chip bytes for every
+    # active channel, every tick, all repeats) goes through snd_chout, which
+    # writes a channel only when its bytes changed (sound.asm).
+    assert ORIG[0x5C0E:0x5C14].hex() == "c5010198cb47" and ORIG[0x5C54] == 0xC1
+    put_bytes(0x5C0F, bytes([0xCD, OPT_CHOUT & 0xFF, OPT_CHOUT >> 8,      # call snd_chout
+                             0x18, 0x5C54 - 0x5C14]),                   # jr $5C54
+              "sound channel output -> snd_chout (unchanged channels skipped)")
     # The sound tick runs from our NMI every vblank (src/sound.asm
     # snd_nmi_tick), not from the handler: music keeps time when the logic lags.
     assert ORIG[0x00D2:0x00D5] == bytes([0xCD, 0x90, 0x5A])

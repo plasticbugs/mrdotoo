@@ -33,6 +33,9 @@ snd_init:
         ld (snd_busy), a
         inc a                   ; the first tick scans the request slots
         ld (snd_req), a         ; (opt.asm)
+        xor a                   ; no channel record, none silenced
+        ld (SND_VALID), a
+        ld (SND_SIL), a
         ret
 
 ; The arcade's sound tick ($5A90, normally called by its vblank handler at
@@ -111,6 +114,186 @@ opt_req:
         push af
         ld a, 1
         ld (snd_req), a
+        pop af
+        ret
+
+; The engine's per-channel output ($5C0F, patched): A = the channel's
+; (iy+0) (bit 0 chip, bits 1-2 channel, bits 3-5 type), IY -> the channel,
+; (iy+8) / (iy+9) its register bytes. The original writes 3 bytes (tone:
+; latch | (iy+9) high nibble, (iy+8), volume | (iy+9) low nibble) or 2
+; (other types: latch | (iy+8), volume | (iy+9)) every tick, all repeats;
+; here only when the channel's bytes or type class changed since it was
+; last written. The noise channels (3) always are: an SN76489 noise-control
+; write restarts the noise, part of the arcade's sound. Registers after it
+; are dead in the original (pop bc, ld de, add iy, djnz); nothing here
+; touches RAM the arcade reads. Clobbers AF, BC, DE, HL.
+; Records for the 6 tone channels (chip * 3 + channel), in the dead DIP-test
+; code after unc_idx: (iy+8), (iy+9) each, then bitmasks.
+SND_SHAD        equ $56F0           ; 6 x [(iy+8), (iy+9)]
+SND_CLS         equ SND_SHAD + 12   ; bit n: channel n's type is "other"
+SND_VALID       equ SND_SHAD + 13   ; bit n: its record holds what the chip has
+SND_SIL         equ SND_SHAD + 14   ; bit n: silenced by the engine since
+        assert unc_idx + 32 <= SND_SHAD && SND_SIL < dirty_q
+snd_chout:
+        ld c, a
+        and 6
+        cp 6
+        jp z, .write            ; noise: always
+        rrca                    ; channel 0-2
+        ld e, a
+        bit 0, c
+        jr z, .c0
+        add a, 3                ; chip 1: 3-5
+.c0:    ld e, a                 ; E = record index
+        add a, a
+        add a, low SND_SHAD
+        ld l, a
+        ld h, high SND_SHAD
+        ld a, e                 ; B = its bit
+        ld b, 1
+        or a
+        jr z, .bit
+.sh:    sla b
+        dec a
+        jr nz, .sh
+.bit:   ld a, c                 ; class of this type: other ($20-$2F) or tone
+        and $38
+        cp $20
+        ld d, 0
+        jr c, .cl
+        cp $30
+        jr nc, .cl
+        ld d, b                 ; D = B if "other"
+.cl:    ld a, (SND_VALID)
+        and b
+        jr z, .new              ; no valid record
+        ld a, (SND_CLS)
+        and b
+        xor d
+        jr nz, .new             ; class changed
+        ld a, (iy+8)
+        cp (hl)
+        jr nz, .new
+        inc l
+        ld a, (iy+9)
+        cp (hl)
+        ret z                   ; unchanged: nothing to write
+        dec l
+.new:   ld a, (iy+8)            ; record it
+        ld (hl), a
+        inc l
+        ld a, (iy+9)
+        ld (hl), a
+        ld hl, SND_VALID
+        ld a, (hl)
+        or b
+        ld (hl), a
+        ld hl, SND_SIL          ; (written: no longer silent)
+        ld a, b
+        cpl
+        and (hl)
+        ld (hl), a
+        ld hl, SND_CLS
+        ld a, b
+        cpl
+        and (hl)
+        or d
+        ld (hl), a
+.write: ld a, c                 ; D = latch base: 1cc0 0000
+        and 6
+        add a, a
+        add a, a
+        add a, a
+        add a, a
+        or $80
+        ld d, a
+        ld hl, snd_w1           ; the chip
+        bit 0, c
+        jr z, .chip
+        ld hl, snd_w2
+.chip:  ld a, c
+        and $38
+        cp $20
+        jr c, .tone
+        cp $30
+        jr c, .other
+.tone:  ld e, (iy+9)
+        ld a, e
+        and $F0
+        rrca
+        rrca
+        rrca
+        rrca
+        or d
+        call .out
+        ld a, (iy+8)
+        call .out
+        ld a, e
+        and $0F
+        or d
+        or $10
+.out:   jp (hl)                 ; (snd_w1 / snd_w2 preserve everything)
+.other: ld a, d
+        or (iy+8)
+        call .out
+        ld a, d
+        or (iy+9)
+        or $10
+        jr .out
+
+; The engine's own silencing of unused channels ($5AE7 / $5AEE: every tick, a
+; volume-off byte for each channel not playing): once is enough until the
+; channel is written again (snd_chout clears the bit); its record is no
+; longer what the chip holds. Noise channels pass every time. Preserves
+; everything.
+snd_sil1:
+        push af
+        push bc
+        push hl
+        ld c, 0
+        jr snd_sil
+snd_sil2:
+        push af
+        push bc
+        push hl
+        ld c, 3
+snd_sil:
+        rlca                    ; channel (bits 6-5)
+        rlca
+        rlca
+        and 3
+        cp 3
+        jr z, .pass
+        add a, c                ; record index
+        ld b, 1
+        or a
+        jr z, .bit
+.sh:    sla b
+        dec a
+        jr nz, .sh
+.bit:   ld hl, SND_SIL
+        ld a, (hl)
+        and b
+        jr nz, .skip            ; silenced already
+        ld a, (hl)
+        or b
+        ld (hl), a
+        ld hl, SND_VALID
+        ld a, b
+        cpl
+        and (hl)
+        ld (hl), a
+.pass:  ld a, c
+        pop hl
+        pop bc
+        or a
+        jr nz, .w2
+        pop af
+        jp snd_w1
+.w2:    pop af
+        jp snd_w2
+.skip:  pop hl
+        pop bc
         pop af
         ret
 
