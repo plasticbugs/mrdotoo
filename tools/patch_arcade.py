@@ -331,6 +331,39 @@ def speed_patches():
     actor_loop_inc()
     if os.environ.get("NOSPEED"):       # A/B testing: the plain arcade loops
         return
+    # queue_sprite_xy ($029D, ~285 T a call, called for every sprite of every
+    # frame): the queue slot is indexed directly instead of via push/pop and
+    # a 16-bit add, stores as before. Same exits: HL = $E001, A = E, D and E
+    # transformed, B / C (C xor $30 when flipped), flags from `sub` then
+    # `inc (hl)`; the full-queue exits (`add a,a / ret c` twice) unchanged.
+    # Exactly the 60 bytes $029D-$02D8 (nothing jumps inside them).
+    assert ORIG[0x029D:0x02D9].hex() == (
+        "2111e37e87d887d8d55f160023 19d13a00e01f380a3e08925 77bd6085f180c79ee304f7ac6"
+        "08573ef8935f70237223712373 2111e3342101e0cbfec9").replace(" ", "")
+    q = bytes([0x21, 0x11, 0x63,          # ld hl,$E311 (CV $6311)
+               0x7E,                      # ld a,(hl)
+               0x87, 0xD8, 0x87, 0xD8,    # add a,a / ret c / add a,a / ret c
+               0xC6, 0x12,                # add a,$12 (low byte of $E312 + 4n)
+               0x6F,                      # ld l,a
+               0x30, 0x01,                # jr nc,+1
+               0x24,                      # inc h
+               0x3A, 0x00, 0x60,          # ld a,($E000)
+               0x1F,                      # rra
+               0x38, 0x00,                # jr c,flip (offset set below)
+               0x3E, 0x08, 0x92, 0x57,    # ld a,8 / sub d / ld d,a
+               0x7B, 0xD6, 0x08, 0x5F,    # ld a,e / sub 8 / ld e,a
+               0x70, 0x23, 0x72, 0x23, 0x71, 0x23, 0x73,   # st: b, d, c, e
+               0x21, 0x11, 0x63, 0x34,    # ld hl,$E311 / inc (hl)
+               0x21, 0x01, 0x60, 0xCB, 0xFE, 0xC9,         # ld hl,$E001 / set 7,(hl) / ret
+               0x79, 0xEE, 0x30, 0x4F,    # flip: ld a,c / xor $30 / ld c,a
+               0x7A, 0xC6, 0x08, 0x57,    # ld a,d / add a,8 / ld d,a
+               0x3E, 0xF8, 0x93, 0x5F,    # ld a,$F8 / sub e / ld e,a
+               0x18, 0x00])               # jr st (offset set below)
+    q = bytearray(q)
+    q[0x13] = q.index(bytes([0x79, 0xEE, 0x30])) - 0x14
+    q[-1] = (q.index(bytes([0x70, 0x23, 0x72])) - len(q)) & 0xFF
+    assert q[0x12] == 0x38 and len(q) <= 0x02D9 - 0x029D
+    put_bytes(0x029D, q, "queue_sprite_xy: slot indexed directly (same exits)")
     # The handler's actor loop: unrolled (actor_loop_inc, opt_actors).
     put_bytes(0x00E9, bytes([0xC3, OPT_ACTORS & 0xFF, OPT_ACTORS >> 8]),
               "actor loop $00E9 -> opt_actors (unrolled)")
