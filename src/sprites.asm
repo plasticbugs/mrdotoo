@@ -559,23 +559,13 @@ spr_emit:
         jr z, .p2
         ld b, a
         ld de, pin_list
-.pin:   ld a, (de)
-        ld l, a
-        ld h, high spr_list
-        call spr_out4
-        inc e
-        djnz .pin
+        call spr_outn
 .p2:    ld a, (unc_n)
         or a
         jr z, .p3
         ld b, a
         ld de, unc_idx
-.un:    ld a, (de)
-        ld l, a
-        ld h, high spr_list
-        call spr_out4
-        inc e
-        djnz .un
+        call spr_outn
 .p3:    ld a, (crowd_n)         ; crowded, rotated three places per frame
         or a
         jp z, spr_term
@@ -587,68 +577,106 @@ spr_emit:
         sub b
         jr .mod
 .rok:   ld (crowd_rot), a
-        ld c, a
+        ld c, a                 ; C = rotation (0 .. n-1)
         ld a, (crowd_dir)       ; every other pass the other way round: with
         xor 1                   ; only rotation, a count that is a multiple
         ld (crowd_dir), a       ; of 3 kept a sprite in the same places for
         jr z, .rot              ; a while (an apple gone for several frames);
-.bk:    ld a, c                 ; reversed, whatever came last comes first
-        or a
-        jr nz, .bd
-        ld a, (crowd_n)
-.bd:    dec a
-        ld c, a
+        ld a, c                 ; reversed, whatever came last comes first:
+        or a                    ; c-1 .. 0, then n-1 .. c
+        jr z, .bk2
+        push bc
+        ld b, c
+        dec a
         add a, low crowd_idx
-        ld l, a
-        ld h, high crowd_idx
-        ld l, (hl)
-        ld h, high spr_list
-        call spr_out4
-        djnz .bk
+        ld e, a
+        ld d, high crowd_idx
+        call spr_outr
+        pop bc
+.bk2:   ld a, (crowd_n)
+        sub c
+        jp z, spr_term
+        ld b, a
+        ld a, (crowd_n)
+        dec a
+        add a, low crowd_idx
+        ld e, a
+        ld d, high crowd_idx
+        call spr_outr
         jp spr_term
-.rot:   ld a, c
+.rot:   ld a, (crowd_n)         ; c .. n-1, then 0 .. c-1
+        sub c
+        ld b, a
+        push bc
+        ld a, c
         add a, low crowd_idx
-        ld l, a
-        ld h, high crowd_idx
-        ld l, (hl)
-        ld h, high spr_list
-        call spr_out4
-        inc c
-        ld a, (crowd_n)
-        cp c
-        jr nz, .rnx
-        ld c, 0
-.rnx:   djnz .rot
+        ld e, a
+        ld d, high crowd_idx
+        call spr_outn
+        pop bc
+        ld a, c
+        or a
+        jp z, spr_term
+        ld b, c
+        ld de, crowd_idx
+        call spr_outn
         jp spr_term
 
-; HL -> spr_list entry: write its four SAT bytes >= 30 T apart (safe outside
-; vblank). Preserves HL.
-spr_out4:
-        ld a, (sat_n)           ; 32 entries at most (overlays count too)
-        cp 32
-        ret nc
-        inc a
+; DE -> a list of spr_list offsets (inside one page), B = how many (1+):
+; their SAT entries, as many as the 32 hardware sprites leave room for,
+; every write >= 30 T after the last (safe outside vblank). spr_outr walks
+; the list backwards. Clobbers AF, BC, E, HL.
+spr_outn:
+        call spr_room
+        ret z
+.e:     call spr_out1
+        inc e
+        djnz .e
+        ret
+spr_outr:
+        call spr_room
+        ret z
+.e:     call spr_out1
+        dec e
+        djnz .e
+        ret
+; B = wanted: B = what fits (Z: none), sat_n counted up.
+spr_room:
+        ld a, (sat_n)
+        ld c, a
+        ld a, 32
+        sub c
+        ret z
+        cp b
+        jr nc, .ok
+        ld b, a
+.ok:    ld a, c
+        add a, b
         ld (sat_n), a
+        or 1                    ; NZ
+        ret
+; (DE) = a spr_list offset: its 4 bytes.
+spr_out1:
+        ld a, (de)
+        ld l, a
+        ld h, high spr_list
         ld a, (hl)
         out (VDP_DATA), a
         inc l
-        nop
-        nop
         ld a, (hl)
+        nop
+        nop
         out (VDP_DATA), a
         inc l
-        nop
-        nop
         ld a, (hl)
+        nop
+        nop
         out (VDP_DATA), a
         inc l
-        nop
-        nop
         ld a, (hl)
+        nop
+        nop
         out (VDP_DATA), a
-        dec l
-        dec l
-        dec l
         ret
 
 ; HL -> sprite entry (code), DE -> 4-byte cache entry. Resolves the pattern
