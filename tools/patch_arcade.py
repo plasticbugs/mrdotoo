@@ -22,6 +22,7 @@ Values of $F000 and up that are not exact scroll-register operands are
 negative offsets (e.g. `ld de,$ffe0` = -32) and are never relocated. Relocating
 a region by a constant keeps offsets inside that region valid.
 """
+import hashlib
 import json
 import os
 import sys
@@ -248,6 +249,7 @@ OPT_CHOUT = OPT_BASE + 33
 OPT_COXY = OPT_BASE + 36
 OPT_CHS = OPT_BASE + 39
 OPT_WOB = OPT_BASE + 42
+OPT_BSEG = OPT_BASE + 45
 OPT_SCAN = []               # (alpha_advance's loop is unrolled now: object_scans_inc)
 OPT_ALPHA = OPT_BASE + 6
 
@@ -481,6 +483,12 @@ def speed_patches():
                            (0x1F78, OPT_WOB, "trigger_apple_wobble $1F78"),
                            (0x41E0, OPT_ALPHA, "alpha_advance $41E0")):
         put_bytes(at, bytes([0xC3, entry & 0xFF, entry >> 8]), f"{why} -> unrolled scan")
+    # The power ball's fragment groups (draw_ball_segment $2CEB through the
+    # four mirror routines to $2E38): src/opt_ball.asm. Checked whole: the
+    # native code mirrors every instruction path of $2CEB-$2E38.
+    assert hashlib.sha1(bytes(ORIG[0x2CEB:0x2E39])).hexdigest() == "f7893ee34c0cf4f4f7b57faabb7c7c25c296cfba"
+    put_bytes(0x2CEB, bytes([0xC3, OPT_BSEG & 0xFF, OPT_BSEG >> 8]),
+              "draw_ball_segment $2CEB -> opt_bseg (native fragments 0-2)")
     # The handler's actor loop: unrolled (actor_loop_inc, opt_actors).
     put_bytes(0x00E9, bytes([0xC3, OPT_ACTORS & 0xFF, OPT_ACTORS >> 8]),
               "actor loop $00E9 -> opt_actors (unrolled)")

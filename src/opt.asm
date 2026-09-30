@@ -25,6 +25,7 @@ opt_table:
         jp opt_coxy             ; +36 check_object_at_xy $4076 (build/opt_scans.inc)
         jp opt_chs              ; +39 chomper_scan_apple $48F5
         jp opt_wob              ; +42 trigger_apple_wobble $1F78
+        jp opt_bseg             ; +45 draw_ball_segment $2CEB (opt_ball.asm)
 
 
 ; Sound tick: HL -> a request-flag byte with bit 0, 1 or 2 set, B = the
