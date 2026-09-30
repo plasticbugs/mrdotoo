@@ -57,6 +57,8 @@ BANDS           equ 30          ; 8-line bands of (screen y + 16)
 SPR_PINNED      equ $40
 SPR_PIN_MAX     equ 4
 BALL_CODE       equ $70         ; the power ball and its burst fragments
+SPR_HALF        equ 1           ; while the arcade lags, rebuild on every other
+                                ; new frame of sprite data (0: every one)
 
 sprites_update:
         ld a, (cam)             ; nothing new since the last pass (no sprite
@@ -65,13 +67,32 @@ sprites_update:
         jr nz, .new
         ld a, (spr_new)
         or a
+        if SPR_HALF
+        jr nz, .data
+        else
         jr nz, .new
-        ld a, (crowd_last)      ; a crowded screen rotates every vblank even
+        endif
+.lag:   ld a, (crowd_last)      ; a crowded screen rotates every vblank even
         or a                    ; when the arcade lags (else a sprite on a
         ret z                   ; hidden turn stayed hidden for the stall);
         ld a, SPR_BANK_A        ; the list and its split stand: only the
         call select_bank        ; output (a fraction of a full pass; chomper
         jp spr_emit             ; sessions lag most)
+.data:  ld hl, spr_lastf         ; new sprite data. Two or more vblanks since the
+        ld a, (frame_cnt)       ; last (the arcade is lagging: a chomper session,
+        ld b, (hl)              ; a crowded round)? Then every other one is
+        ld (hl), a              ; left out: the sprite list is ~16% of the CPU
+        sub b                   ; there, and the arcade gets the time back.
+        cp 2                    ; The screen keeps the last list (rotating
+        jr c, .new              ; when crowded).
+        ld hl, spr_tog
+        ld a, (hl)
+        xor 1
+        ld (hl), a
+        jr z, .new
+        xor a
+        ld (spr_new), a
+        jr .lag
 .new:   ld a, (cam)
         ld (spr_cam), a
         xor a

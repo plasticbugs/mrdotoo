@@ -278,7 +278,9 @@ snd_silchk:
         rlca
         add a, l
         ld l, a
-        ld a, (hl)              ; its record bit (0: noise, always written)
+        jr nc, .p
+        inc h
+.p:     ld a, (hl)              ; its record bit (0: noise, always written)
         or a
         jr z, .nz
         ld l, a
@@ -300,7 +302,6 @@ snd_silchk:
         ret
 snd_sbit1:      db 1, 2, 4, 0
 snd_sbit2:      db 8, 16, 32, 0
-        assert high snd_sbit1 == high (snd_sbit2 + 3)
 
 ; rst $10: the arcade's `ld (bc),a` into a sound chip. Every register and
 ; flag preserved (the store is kept too: the I/O cell).
