@@ -349,6 +349,23 @@ render_body:
 .done:  ld a, ARC_HI_BANK
         jp select_bank
 
+; Display off with a black backdrop, no sprites: upload_set turns it back on.
+; Clobbers AF, C, HL.
+screen_black:
+        ld a, VDP_R1_ON & ~$40
+        ld c, 1
+        call vdp_reg
+        ld a, VDP_R7
+        ld c, 7
+        call vdp_reg
+        ld a, 1                 ; (and the upload's blank frame stays black)
+        ld (up_black), a
+        ld hl, VR_SAT
+        call vdp_set_write
+        ld a, SAT_END
+        out (VDP_DATA), a
+        ret
+
 ; The arcade is wiping the whole screen of a cutscene or other screen (a
 ; full-screen fill, opt.asm fill_fast): nothing of it is worth drawing any
 ; more. Black display, no mode (no cells drawn, no band, no sprites) until
@@ -597,8 +614,11 @@ check_screens:
         ld a, (hl)              ; entry +13: image bank (0 = none)
         or a
         jr nz, .image
-        ld a, MODE_SCREEN
-        ld (mode), a
+        ld a, (mode)            ; from the playfield (a round's end into
+        cp MODE_PLAYFIELD       ; VERY GOOD / WONDERFUL / ...): black until
+        call z, screen_black    ; the new set is up (the arcade's own cells,
+        ld a, MODE_SCREEN       ; drawn with the old tiles, the HUD panel and
+        ld (mode), a            ; the old sprites flashed for ~8 frames)
         pop hl
         pop af
         call upload_start
