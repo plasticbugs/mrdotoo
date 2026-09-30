@@ -87,6 +87,9 @@ Arcade-faithful port of Mr. Do! (Universal 1982) to the ColecoVision + Super Gam
 - RAM validation cannot see rendering bugs. `tools/diff/compare_frames.sh SEED CAM H1 H2 ...` captures MAME and the normal build at the same handlers and writes a side-by-side sheet (build/frames.png) with a per-frame pixel agreement (baseline ~81% with correct sprites; a sprite placement bug shows up at a glance).
 - Debug aids (env vars): `WATCH=addr` (MAME: arcade address; openMSX: CV address) logs writes with PC and handler; `RTRACE`, `ITRACE`, `HTRACE` trace fg-tile reads, input reads and handler entries.
 
+## Options screen
+- src/options.asm: keypad * in attract (no game, no credit: $E000 bit 7 clear, $E006 = 0) opens the MSX2-style DIP screen: LIVES (2-5), EXTRA, SPECIAL (EASY/HARD), DIFFICULTY (1-4) = arcade DSW1 bits (7-6, 4, 3, 1-0; others from DSW1_DEFAULT). The value lives in opt_dsw1 ($59CC, ROM padding; opt_init at boot) and read_inputs copies it to IO_DSW1 every vblank. While open the NMI shows only this screen and gives the arcade no vblank (it waits); * or fire closes it and the renderer forgets its screen/colourway so the attract screen is rebuilt. # inserts coins now. (Key codes: KEY_STAR $06 / KEY_HASH $09 as the port has used them; real CV keypads may have * and # the other way round.)
+
 ## Build and test
 - **Always run MAME with `SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy`** (plus `-video none -sound none`). Without it MAME activates as a macOS GUI app and pulls the user's screen to another Space. Recordings and `-snapshot_directory` screenshots work the same. openMSX is fine as is.
 - `make`: SjASMPlus builds `build/mrdo.rom` (256KB MegaCart image). `make run` starts openMSX. `make test` boots headless-ish for 4 emulated seconds, prints the self-test verdicts and saves `build/boot.png`.

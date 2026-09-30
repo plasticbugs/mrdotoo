@@ -295,6 +295,7 @@ start:
         ld (hl), 0
         ldir
         call render_init
+        call opt_init
         call snd_init
         call sprites_init
         call inputs_idle
@@ -433,6 +434,9 @@ nmi:
         jp po, .busy            ; video RAM holds one whole frame
         inc a
 .busy:  ld (arc_idle), a
+        ld a, (opt_on)          ; the options screen is up: only it, and no
+        or a                    ; vblank for the arcade (options.asm)
+        jp nz, opt_nmi
         ifndef VALIDATE
         call snd_sched          ; the sound tick first: on time even when the
         endif                   ; drawing below runs long (sound.asm)
@@ -681,11 +685,13 @@ read_inputs:
         cp (hl)
         ld (hl), a
         jr z, .held             ; act on new presses only
-        cp KEY_STAR
+        cp KEY_HASH             ; # inserts a coin
         jr nz, .nk1
         ld a, 4
         ld (coin_hold), a
-.nk1:
+.nk1:   cp KEY_STAR             ; * opens the options screen (attract only)
+        call z, opt_request
+        ld a, (hl)
 .held:  ld a, (hl)
         cp KEY_1
         jr nz, .n1
@@ -705,7 +711,7 @@ read_inputs:
         res 6, b
 .nc:    ld a, b
         ld (IO_IN1), a
-.dsw:   ld a, DSW1_DEFAULT
+.dsw:   ld a, (opt_dsw1)        ; (options.asm)
         ld (IO_DSW1), a
         ld a, DSW2_DEFAULT
         ld (IO_DSW2), a
@@ -932,6 +938,7 @@ font_len equ $-font
         include "vgland.asm"
         include "logo.asm"
         include "apples.asm"
+        include "options.asm"
         include "build/screens/logo.inc"
         include "build/tiles/hud.inc"
 
