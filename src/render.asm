@@ -668,8 +668,13 @@ upload_set:
         jr nz, .noh
         ld a, (hud_ok)          ; the HUD glyphs and panel (hud.asm): after a
         or a                    ; screen's set all of them; between two
-        call z, hud_upload      ; playfield sets only the few the set's
-        call nz, hud_extra      ; tiles overwrite (~4 blank frames -> <1)
+        jr nz, .hx              ; playfield sets only the few the set's
+        call hud_upload         ; tiles overwrite (~4 blank frames -> <1),
+        jr .hu                  ; and the panel is repainted once the
+.hx:    call hud_extra          ; display is back on (the arcade drew the
+        ld a, 1                 ; new SCENE number during its bulk repaint,
+        ld (hud_redo), a        ; when HUD cells are only counted)
+.hu:
         ld a, (plate_want)
         cp $FF
         call nz, plate_load
@@ -690,7 +695,13 @@ upload_set:
         call vdp_reg
         ld a, VDP_R1_ON
         ld c, 1
-        jp vdp_reg
+        call vdp_reg
+        ld a, (hud_redo)        ; (~70k T, with the picture showing)
+        or a
+        ret z
+        xor a
+        ld (hud_redo), a
+        jp hud_redraw
 ; HL = VRAM address, DE = offset in the set. Display blanked: no spacing
 ; needed between writes.
 .table: call vdp_set_write

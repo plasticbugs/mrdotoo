@@ -145,6 +145,7 @@ pf_drops:       ds 2            ; vblanks skipped so the pathfinder could run
 hud_ok:         ds 1            ; the HUD glyphs at HUD_BASE.. are in VRAM (hud.asm)
 spr_lastf:      ds 1            ; sprites.asm: frame_cnt at the last new sprite data
 spr_tog:        ds 1            ;   while lagging, every other one is dropped
+hud_redo:       ds 1            ; render.asm: repaint the HUD panel once the display is on
         assert $ <= DRV_RAM_END
 
         ifdef VALIDATE
