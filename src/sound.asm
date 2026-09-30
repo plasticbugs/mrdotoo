@@ -248,54 +248,59 @@ snd_chout:
 ; everything.
 snd_sil1:
         push af
-        push bc
         push hl
-        ld c, 0
-        jr snd_sil
-snd_sil2:
-        push af
-        push bc
-        push hl
-        ld c, 3
-snd_sil:
-        rlca                    ; channel (bits 6-5)
-        rlca
-        rlca
-        and 3
-        cp 3
-        jr z, .pass
-        add a, c                ; record index
-        ld b, 1
-        or a
-        jr z, .bit
-.sh:    sla b
-        dec a
-        jr nz, .sh
-.bit:   ld hl, SND_SIL
-        ld a, (hl)
-        and b
-        jr nz, .skip            ; silenced already
-        ld a, (hl)
-        or b
-        ld (hl), a
-        ld hl, SND_VALID
-        ld a, b
-        cpl
-        and (hl)
-        ld (hl), a
-.pass:  ld a, c
+        ld hl, snd_sbit1
+        call snd_silchk
         pop hl
-        pop bc
-        or a
-        jr nz, .w2
+        jr z, .skip
         pop af
         jp snd_w1
-.w2:    pop af
-        jp snd_w2
-.skip:  pop hl
-        pop bc
-        pop af
+.skip:  pop af
         ret
+snd_sil2:
+        push af
+        push hl
+        ld hl, snd_sbit2
+        call snd_silchk
+        pop hl
+        jr z, .skip
+        pop af
+        jp snd_w2
+.skip:  pop af
+        ret
+; A = the volume byte, HL -> the chip's record bits: Z if this silence is
+; a repeat (skip it); else NZ and recorded (silenced, record no longer
+; what the chip holds). Clobbers A, HL.
+snd_silchk:
+        and $60                 ; channel (bits 6-5) -> 0-3
+        rlca
+        rlca
+        rlca
+        add a, l
+        ld l, a
+        ld a, (hl)              ; its record bit (0: noise, always written)
+        or a
+        jr z, .nz
+        ld l, a
+        ld a, (SND_SIL)
+        and l
+        jr nz, .z               ; silenced already
+        ld a, (SND_SIL)
+        or l
+        ld (SND_SIL), a
+        ld a, l
+        cpl
+        ld l, a
+        ld a, (SND_VALID)
+        and l
+        ld (SND_VALID), a
+.nz:    or 1
+        ret
+.z:     xor a
+        ret
+snd_sbit1:      db 1, 2, 4, 0
+snd_sbit2:      db 8, 16, 32, 0
+        assert high snd_sbit1 == high (snd_sbit2 + 3)
 
 ; rst $10: the arcade's `ld (bc),a` into a sound chip. Every register and
 ; flag preserved (the store is kept too: the I/O cell).
