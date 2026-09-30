@@ -7,4 +7,4 @@ SEED=${1:-3}; FRAMES=${2:-1500}
 MRDO_SYM=$PWD/build/mrdo_validate.sym REF=build/diff/s$SEED/ref OUTRAM=build/bench.ram FRAMES=$FRAMES HEAVY=1 \
   ${OPENMSX:-/Applications/openMSX.app/Contents/MacOS/openmsx} -machine ColecoVision_SGM \
   -carta build/mrdo_validate.rom -romtype ColecoMegaCart -command "set renderer none" \
-  -script tools/diff/cv_replay.tcl -script tools/diff/sprite_check.tcl -script tools/diff/apple_check.tcl 2>&1 | grep -A5 -E "SPRITE CHECK|APLVIS"
+  -script tools/diff/cv_replay.tcl -script tools/diff/sprite_check.tcl -script tools/diff/apple_check.tcl 2>&1 | grep -A5 -E "SPRITE CHECK|APLVIS|handler"
