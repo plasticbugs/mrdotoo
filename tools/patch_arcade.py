@@ -313,19 +313,29 @@ def actor_loop_inc():
               "        push bc",
               "        push hl",
               "        push iy",
-              "        ld bc, $0104",
-              "        push bc",
+              f"        ld bc, .r{i}             ; (the original pushes $0104, whose",
+              "        push bc                 ; pops and djnz lead to the next entry)",
               f"        ld de, ${nxt:04X}",
               f"        ld hl, ${handler:04X}",
               "        jp (hl)"]
-    L += ["; $0104, the handlers' return: pop iy / pop hl / pop bc / djnz $00E9",
+    # the handlers' return: what $0104 does (pop iy / pop hl / pop bc / djnz),
+    # straight into the next entry
+    for i in range(n):
+        L += [f".r{i}:    pop iy", "        pop hl", "        pop bc"]
+        if i < n - 1:
+            L += [f"        jp .e{i + 1}"]
+        else:
+            L += ["        dec b                   ; (B = 0, HL = $01A6, DE / IX as the handler",
+                  "        jp $010A                ; left them)"]
+    L += ["; $0104 is no longer a return address (kept for anything else that",
+          "; might jump there): pop iy / pop hl / pop bc / djnz $00E9",
           "opt_actors_ret:",
           "        pop iy",
           "        pop hl",
           "        pop bc",
           "        dec b",
-          "        jp z, $010A             ; (HL = $01A6, DE / IX as the handler left them)",
-          "        ld e, b                 ; on at entry n - B (A, C untouched)",
+          "        jp z, $010A",
+          "        ld e, b",
           "        ld d, 0",
           "        ld hl, .jt - 2",
           "        add hl, de",
