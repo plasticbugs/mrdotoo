@@ -57,7 +57,16 @@ apple_reset:
 apple_try:
         ld a, (mode)
         cp MODE_PLAYFIELD
-        jr nz, .no
+        jp nz, .no
+        ld a, (redraw_all)      ; a full redraw pending, under way or not yet
+        or a                    ; shown: stay a sprite (the table on screen
+        jp nz, .no              ; is the old one for a few vblanks)
+        ld a, (flip_wait)
+        or a
+        jp nz, .no
+        ld a, (rd_row)
+        cp PF_ROWS
+        jp c, .no
         inc l
         ld a, (hl)              ; colour line 5, not flipped
         dec l
@@ -373,8 +382,21 @@ apple_sync:
 .nz:    or 1
         ret
 
-; B = ty, C = tx: draw its 4 cells again (draw_cell asks apple_at).
+; B = list row, C = tx: draw its 4 cells again (draw_cell asks apple_at).
+; While a full redraw is pending, under way or waiting to be shown, the
+; cells are queued instead, like any cell the arcade changes: drawn now they
+; would land in the table on screen and miss the one being built (a tiled
+; apple stayed invisible after a camera move until it was touched).
 apl_redraw4:
+        ld a, (redraw_all)
+        or a
+        ret nz                  ; (a redraw not started yet covers them)
+        ld a, (rd_row)
+        cp PF_ROWS
+        jr c, apl_queue4
+        ld a, (flip_wait)
+        or a
+        jr nz, apl_queue4
         ld d, 0
 .r:     ld e, 0
 .c:     push bc
@@ -391,6 +413,35 @@ apl_redraw4:
         call apl_cell
         ex de, hl
         call draw_cell
+.skip:  pop de
+        pop bc
+        inc e
+        ld a, e
+        cp 2
+        jr c, .c
+        inc d
+        ld a, d
+        cp 2
+        jr c, .r
+        ret
+
+; B = list row, C = tx: its 4 cells into the renderer's queue.
+apl_queue4:
+        ld d, 0
+.r:     ld e, 0
+.c:     push bc
+        push de
+        ld a, c
+        add a, e
+        ld e, a
+        ld a, (cam)             ; screen row = list row - cam + dy
+        neg
+        add a, b
+        add a, d
+        cp PF_ROWS
+        jr nc, .skip
+        call apl_cell           ; HL = cell
+        call queue_cell
 .skip:  pop de
         pop bc
         inc e
