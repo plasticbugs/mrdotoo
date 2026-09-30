@@ -217,7 +217,11 @@ snd_chout:
         jr c, .tone
         cp $30
         jr c, .other
-.tone:  ld e, (iy+9)
+.tone:  ld a, c                 ; a tone channel (not noise): all three bytes
+        and 6                   ; at once (snd_tone)
+        cp 6
+        jp nz, snd_tone
+        ld e, (iy+9)
         ld a, e
         and $F0
         rrca
@@ -240,6 +244,90 @@ snd_chout:
         or (iy+9)
         or $10
         jr .out
+
+; A tone channel's three bytes (latch | (iy+9) high nibble, (iy+8),
+; volume | (iy+9) low nibble) straight to the chip: the same port writes and
+; the same latch state as sending them one by one through snd_w1 / snd_w2
+; (whose latch-then-data bookkeeping and register saves, three times per
+; channel per tick, cost more than the writes). D = latch base, C = (iy+0),
+; IY -> the channel. Clobbers AF, BC, DE, HL.
+snd_tone:
+        ld e, (iy+9)
+        ld a, e
+        and $F0
+        rrca
+        rrca
+        rrca
+        rrca
+        or d                    ; the latch byte
+        ld b, (iy+8)            ; the data byte
+        push de
+        push bc
+        call snd_period         ; HL = the scaled period
+        pop bc
+        pop de
+        ld a, e                 ; E = the volume byte
+        and $0F
+        or d
+        or $10
+        ld e, a
+        bit 0, c
+        jr nz, .ay
+        ld a, l                 ; SN76489: latch with the low 4 bits,
+        and $0F
+        or d
+        out (SN_PORT), a
+        ld a, l                 ; the high 6,
+        srl h
+        rra
+        srl h
+        rra
+        srl h
+        rra
+        srl h
+        rra
+        and $3F
+        out (SN_PORT), a
+        ld a, e                 ; the volume byte
+        ld (snd_lat1), a
+        nop
+        out (SN_PORT), a
+        ret
+.ay:    ld a, e                 ; AY: the period's two registers
+        ld (snd_lat2), a
+        ld a, c
+        rrca
+        and 3                   ; channel 0-2
+        ld c, a
+        add a, a
+        out (SGM_AY_ADDR), a
+        ld d, a
+        ld a, l
+        out (SGM_AY_WRITE), a
+        ld a, d
+        inc a
+        out (SGM_AY_ADDR), a
+        ld a, h
+        out (SGM_AY_WRITE), a
+        ld a, e                 ; the volume (snd_w2's .vol)
+        and $0F
+        ld hl, AtnToVol
+        add a, l
+        ld l, a
+        jr nc, .v1
+        inc h
+.v1:    ld e, (hl)
+        ld a, c
+        cp 2
+        jr z, .c
+        add a, 8
+        out (SGM_AY_ADDR), a
+        ld a, e
+        out (SGM_AY_WRITE), a
+        ret
+.c:     ld a, e
+        ld (snd_tvolc), a
+        jp ay_chan_c
 
 ; The engine's own silencing of unused channels ($5AE7 / $5AEE: every tick, a
 ; volume-off byte for each channel not playing): once is enough until the

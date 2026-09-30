@@ -17,7 +17,45 @@ proc apply {c v} {
 # every byte that reaches a translator updates the model
 debug set_bp [symaddr snd_w1] {} { set ::chip(1) [apply $::chip(1) [reg a]] }
 debug set_bp [symaddr snd_w2] {} { set ::chip(2) [apply $::chip(2) [reg a]] }
+# a tone channel's three bytes sent at once (snd_tone): the same bytes
+debug set_bp [symaddr snd_tone] {} {
+  set c [reg c]; set d [reg d]; set iy [reg iy]
+  set i8 [peek [expr {$iy+8}]]; set i9 [peek [expr {$iy+9}]]
+  set n [expr {($c & 1) + 1}]
+  foreach b [list [expr {(($i9 & 0xF0) >> 4) | $d}] $i8 [expr {($i9 & 0x0F) | $d | 0x10}]] { set ::chip($n) [apply $::chip($n) $b] }
+}
 set ::checks 0; set ::bad 0; set ::ex {}
+# ...and its port writes must be what snd_w1 / snd_w2 write for those bytes
+set ::tcap 0; set ::tio {}; set ::tn 0; set ::tbad 0
+debug set_watchpoint write_io 0xFF {$::tcap} { lappend ::tio "S[format %02x $::wp_last_value]" }
+debug set_watchpoint write_io 0x50 {$::tcap} { lappend ::tio "A[format %02x $::wp_last_value]" }
+debug set_watchpoint write_io 0x51 {$::tcap} { lappend ::tio "W[format %02x $::wp_last_value]" }
+debug set_bp [symaddr snd_tone] {} {
+  set iy [reg iy]; set ::tin [list [reg c] [reg d] [peek [expr {$iy+8}]] [peek [expr {$iy+9}]] [peek [symaddr snd_tvolc]] [peek [symaddr snd_nvol2]]]
+  set ::tio {}; set ::tcap 1
+}
+debug set_bp 0x5C12 {$::tcap} { set ::tcap 0; incr ::tn; if {[expect_io {*}$::tin] ne $::tio} { incr ::tbad; incr ::bad; if {[llength $::ex] < 5} { lappend ::ex "snd_tone $::tin: $::tio" } } }
+set ::atn {15 14 14 13 12 12 11 10 10 9 8 8 7 6 6 0}
+proc h2 {v} { format %02x [expr {$v & 0xFF}] }
+proc expect_io {c d i8 i9 tvolc nvol2} {
+  set lat [expr {(($i9 & 0xF0) >> 4) | $d}]
+  set p [expr {(($i8 & 0x3F) << 4) | ($lat & 0x0F)}]
+  set sc [expr {$p - ($p >> 3)}]
+  set vb [expr {($i9 & 0x0F) | $d | 0x10}]
+  set ch [expr {($c >> 1) & 3}]
+  if {!($c & 1)} {
+    return [list S[h2 [expr {($lat & 0xF0) | ($sc & 0x0F)}]] S[h2 [expr {($sc >> 4) & 0x3F}]] S[h2 $vb]]
+  }
+  set l [list A[h2 [expr {2*$ch}]] W[h2 [expr {$sc & 0xFF}]] A[h2 [expr {2*$ch+1}]] W[h2 [expr {$sc >> 8}]]]
+  set vol [lindex $::atn [expr {$vb & 15}]]
+  if {$ch == 2} {
+    set e [expr {$vol > $nvol2 ? $vol : $nvol2}]
+    set mix [expr {$nvol2 ? (0x38 & ~0x20) : 0x38}]
+    lappend l A0a W[h2 $e] A07 W[h2 $mix]
+  } else { lappend l A[h2 [expr {8+$ch}]] W[h2 $vol] }
+  return $l
+}
+
 proc expect {chipn bytes} {
   set c $::chip($chipn); foreach b $bytes { set c [apply $c $b] }
   # the latch register may differ harmlessly (tone pairs always rewrite it); compare the rest
@@ -41,7 +79,8 @@ after time 4.1 { inp 0xff 0xff }
 after time 5   { inp 0xdf 0xff }
 after time 5.2 { inp 0xff 0xff }
 set ::dirs {0xfe 0xfd 0xfb 0xf7 0xef 0xff}
-proc mv {} { poke [symaddr inp_p1] [lindex $::dirs [expr {int(rand()*6)}]]; poke [symaddr inp_override] 1; after time 0.7 mv }
+set ::mvn 0
+proc mv {} { incr ::mvn; set d [lindex $::dirs [expr {int(rand()*6)}]]; if {$::mvn % 4 == 0} { set d [expr {$d & 0xEF}] }; poke [symaddr inp_p1] $d; poke [symaddr inp_override] 1; after time 0.7 mv }
 after time 6 mv
 after time 10 { poke 0x60B2 [expr {[peek 0x60B2] | 3}] }
-after time 50 { puts stderr "SNDVERIFY checks=$::checks bad=$::bad"; foreach e $::ex { puts stderr "  $e" }; exit }
+after time 50 { puts stderr "SNDVERIFY checks=$::checks tone-writes=$::tn bad=$::bad"; foreach e $::ex { puts stderr "  $e" }; exit }
