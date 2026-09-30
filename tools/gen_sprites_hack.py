@@ -339,6 +339,13 @@ MAP = [
     ("digger horizontal", [0x33, 0x34, 0x35], DIG, ALL8, "digger"),
     ("digger vertical", [0x36, 0x37, 0x38], DIG, ALL8, "digger"),
     ("monster push", [0x39, 0x3A, 0x3B], PUSH, ALL8, "monster"),
+    # the white monster turning into a digger ($3362: codes $7A-$7C / $7D-$7F,
+    # colour line 8; flip bits set exactly like the walk's): the walk art with
+    # the walk groups' own facing, kept white (user, 2026-09-29)
+    ("monster turning horizontal", [0x7A, 0x7B, 0x7C], WALK,
+     "same:monster walk horizontal", "keep"),
+    ("monster turning vertical", [0x7D, 0x7E, 0x7F], WALK,
+     "same:monster walk vertical", "keep"),
     ("monster squashed by apple", [0x3C], [SQUISH], ["id", "mx"], "squish"),
     ("chomper horizontal", [0x27, 0x28], CHOMP, ALL8, "chomper"),
     # vertical movers: the arcade turns them, so only the turned forms of the
@@ -383,6 +390,7 @@ HUE = {  # arcade-nearest TMS colour -> hack shade
     "squish": {6: 13, 8: 13, 9: 13},
     # alpha: the hack's two shades (yellow 11, red 8); blues -> light blue 5
     "alpha": {6: 8, 8: 8, 9: 8, 10: 11, 11: 11, 4: 5, 5: 5},
+    "keep": {},
 }
 FIXED = {  # (rule, line) -> colour, where the hack is explicit
     ("digger", 2): 5, ("digger", 8): 5, ("digger", 11): 5,   # arcade dig lines
@@ -565,7 +573,10 @@ def main():
     chosen = {}          # code -> (label, xform, shift, iou, note)
     layers = {}          # key -> (main grid, overlay grid)
 
+    group_xf = {}
     for group, codes, cands, xfs, rule in MAP:
+        if isinstance(xfs, str):        # "same:<group>": that group's facing
+            xfs = [group_xf[xfs[5:]]]
         best_xf = None
         for xf in xfs:
             tot, picks = 0.0, {}
@@ -580,6 +591,7 @@ def main():
             if best_xf is None or tot > best_xf[0]:
                 best_xf = (tot, xf, picks)
         _, xf, picks = best_xf
+        group_xf[group] = xf
         for code in codes:
             s, lbl, h, sh = picks[code]
             if group == "apple wobble":
@@ -658,7 +670,6 @@ ARCADE_NOTES = {
     0x70: "ball fragment (kept arcade)", 0x79: "ball fragment (kept arcade)",
     **{c: "score sign (kept arcade by request)" for c in range(0x71, 0x78)},
     0x78: "celebration ball (kept arcade)",
-    **{c: "monster killed by ball: hack has no such art (kept arcade)" for c in range(0x7A, 0x80)},
 }
 
 
