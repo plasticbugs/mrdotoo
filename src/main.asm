@@ -222,6 +222,11 @@ spr_tog:        ds 1            ;   while lagging, every other one is dropped
         incbin "build/sprites/mrdo_white.bin", 0, $2000  ; overlay patterns
         ds $E100-$, $FF                 ; the HUD panel's glyphs and tables
         incbin "build/tiles/hud.bin"    ; (tools/gen_hud.py, src/hud.asm)
+clown_data:                             ; the romhack's clown and logo
+        incbin "build/screens/clown.bin"        ; (logo.asm LOGO_BANK)
+logo_data:
+        incbin "build/screens/logo.bin"
+        assert $ <= $FFC0               ; (the MegaCart hotspot)
         ds $10000-$, $FF
 
 ; =============================================================================

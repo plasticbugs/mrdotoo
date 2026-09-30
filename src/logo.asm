@@ -101,7 +101,7 @@ logo_cell:
         ld de, LOGO_NAMES
         add hl, de
         pop de
-        ld a, (hl)
+        call logo_peek
         pop hl
         scf
         ret
@@ -140,7 +140,7 @@ clown_cell:
         jr nz, .fm
 .f0:    ld de, CLOWN_NAMES
         add hl, de
-        ld a, (hl)
+        call logo_peek
         pop de
         pop hl
         scf
@@ -156,6 +156,14 @@ logo_tick:
         ld a, (logo_on)
         or a
         ret z
+        ld a, (cur_bank)        ; (the data's bank for the whole tick)
+        push af
+        ld a, LOGO_BANK
+        call select_bank
+        call .tick
+        pop af
+        jp select_bank
+.tick:  ld a, (logo_on)
         cp 2
         jp z, clown_tick
         ld a, (up_pending)
@@ -291,6 +299,8 @@ clown_tick:
         call select_bank
         ld a, (SPR_COLOURS + CLW_TOKEN * 16 + 12)
         ld (clw_tcol), a
+        ld a, LOGO_BANK         ; (the clown's data again)
+        call select_bank
         jr clown_sat
 .run:   ld a, (frame_cnt)       ; then a frame every 8 vblanks
         and 7
@@ -453,8 +463,27 @@ clown_leave:
         pop bc
         ret
 
-clown_data:
-        incbin "build/screens/clown.bin"
+; The logo's and clown's data live in bank 30 (main.asm, after the HUD's):
+; the fixed bank is kept for code the arcade calls. Per-cell lookups (called
+; while drawing, with any bank mapped) go through logo_peek; the vblank ticks
+; map the bank for their whole run.
+LOGO_BANK       equ SPR_BANK_W
 
-logo_data:
-        incbin "build/screens/logo.bin"
+; HL -> a byte of the logo / clown data: A = it, the previous bank mapped
+; again. Preserves BC, DE, HL.
+logo_peek:
+        push bc
+        push hl
+        ld a, (cur_bank)
+        ld b, a
+        ld a, LOGO_BANK
+        call select_bank
+        pop hl
+        ld c, (hl)
+        push hl
+        ld a, b
+        call select_bank
+        pop hl
+        ld a, c
+        pop bc
+        ret
