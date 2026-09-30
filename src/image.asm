@@ -25,6 +25,8 @@ FLAG_ROW        equ 17
 image_show:
         ld (img_bank), a
         call select_bank
+        xor a                   ; (its tiles overwrite the HUD glyphs)
+        ld (hud_ok), a
         ld a, VDP_R1_ON & ~$40  ; blanked: writes may come back to back
         ld c, 1
         call vdp_reg

@@ -666,7 +666,10 @@ upload_set:
         ld a, (mode)
         cp MODE_PLAYFIELD
         jr nz, .noh
-        call hud_upload         ; the HUD glyphs and panel (hud.asm)
+        ld a, (hud_ok)          ; the HUD glyphs and panel (hud.asm): after a
+        or a                    ; screen's set all of them; between two
+        call z, hud_upload      ; playfield sets only the few the set's
+        call nz, hud_extra      ; tiles overwrite (~4 blank frames -> <1)
         ld a, (plate_want)
         cp $FF
         call nz, plate_load
@@ -677,7 +680,8 @@ upload_set:
         call nz, score_load
         jr .hd
 .noh:   xor a                   ; a screen: no panel (its set overwrote the
-        call hud_clear          ; HUD glyphs)
+        ld (hud_ok), a          ; HUD glyphs)
+        call hud_clear
 .hd:    xor a
         ld (up_pending), a
         call flip_pnt

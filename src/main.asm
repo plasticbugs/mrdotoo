@@ -142,6 +142,7 @@ scratch_de:     ds 2            ; irq_after_ei
 repend:         ds 1            ; a vblank arrived while one was being delivered
 pf_starve:      ds 1            ; held vblanks delivered back to back
 pf_drops:       ds 2            ; vblanks skipped so the pathfinder could run
+hud_ok:         ds 1            ; the HUD glyphs at HUD_BASE.. are in VRAM (hud.asm)
         assert $ <= DRV_RAM_END
 
         ifdef VALIDATE

@@ -208,6 +208,8 @@ hud_upload:
         ld bc, (HUD_N - HUD_N0)*8
         call .tbl
         endif
+        ld a, 1
+        ld (hud_ok), a
         ld a, HUD_BASE
         call hud_clear
         jr hud_redraw
@@ -221,6 +223,25 @@ hud_upload:
         or c
         jr nz, .t
         ret
+
+; A playfield set just went up over another playfield set (display blanked):
+; the glyphs at HUD_BASE.. and the panel's names are still there; only the
+; ones at HUD_EXTRA0.. (inside the set's range) need writing again.
+hud_extra:
+        if HUD_N > HUD_N0
+        ld a, HUD_BANK
+        call select_bank
+        ld hl, VR_PT + HUD_EXTRA0*8
+        ld de, HUD_PAT + HUD_N0*8
+        ld bc, (HUD_N - HUD_N0)*8
+        call hud_upload.tbl
+        ld hl, VR_CT + HUD_EXTRA0*8
+        ld de, HUD_COL + HUD_N0*8
+        ld bc, (HUD_N - HUD_N0)*8
+        jp hud_upload.tbl
+        else
+        ret
+        endif
 
 ; Display blanked: columns 24-31 of both name tables to code A (a screen's
 ; tile set leaves them to code 0, as before the HUD existed). Clobbers
