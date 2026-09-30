@@ -12,7 +12,7 @@ opt_table:
         assert $ == OPT_BASE
         jp opt_snd_slot         ; +0 sound tick $5A90
         jp opt_spr_copy         ; +3 the handler's sprite RAM copy ($00C8)
-        jp opt_next_98          ; +6 alpha_advance loop tail $420D
+        jp opt_alpha            ; +6 alpha_advance $41E0 (build/opt_scans.inc)
         jp snd_sil1             ; +9 ld ($9801),a at $5AE7 (sound.asm)
         jp snd_sil2             ; +12 ld ($9802),a at $5AEE
         jp fill_046c            ; +15 video fill $046D (attr A, tile $29)
@@ -59,29 +59,4 @@ opt_spr_copy:
         pop af
         ret
 
-; Object-table scan loop tails (patched `add iy,de / djnz body`). Same two
-; instructions first, so the loop exits exactly as before. Then objects that
-; cannot match are passed over through HL (38-45 T instead of 66), and the
-; original body takes the next candidate, or the last object in any case.
-; IY -> object, B = objects left including it (the original's count), DE = 7.
-; Preserves HL.
-opt_next_98:                    ; alpha_advance ($41D6): state == $98
-        add iy, de
-        djnz .more
-        jp $4211
-.more:  push hl
-        push iy
-        pop hl
-        dec b                   ; B-1 objects may be passed over
-        jr z, .take
-        ld a, $98
-.l:     cp (hl)
-        jr z, .take
-        add hl, de
-        djnz .l
-.take:  inc b
-        push hl
-        pop iy
-        pop hl
-        jp $41EC
 

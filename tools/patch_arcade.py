@@ -248,7 +248,8 @@ OPT_CHOUT = OPT_BASE + 33
 OPT_COXY = OPT_BASE + 36
 OPT_CHS = OPT_BASE + 39
 OPT_WOB = OPT_BASE + 42
-OPT_SCAN = [(0x420D, 0x41EC, 0x4211, OPT_BASE + 6, "alpha_advance: next object in state $98")]
+OPT_SCAN = []               # (alpha_advance's loop is unrolled now: object_scans_inc)
+OPT_ALPHA = OPT_BASE + 6
 
 
 def sound_patches():
@@ -401,6 +402,28 @@ def object_scans_inc():
     L += ["        ld de, 77               ; the loop's last `add iy,de` (flags H N C)",
           "        add iy, de", "        ld de, 7", "        add iy, de", "        ld b, 0",
           "        pop iy", "        ret"]
+    # alpha_advance $41E0 (after its two early returns): the first slot in
+    # state $98 level with the actor (Y within 1) and 14 px ahead / behind:
+    # on at $4214 / $421E with the loop's B and DE
+    assert ORIG[0x41E0:0x4214].hex() == (
+        "fde5113100fd19110700060cfd7e00fe98201add7e03fd96032804feff380edd7e01fd9601"
+        "fe0e380bfef33011fd1910dbfde1c9")
+    L += ["opt_alpha:", "        push iy", "        ld de, $0031", "        add iy, de"]
+    for k in range(12):
+        o = 7 * k
+        L += [f"        ld a, (iy+{o})", "        cp $98", f"        jr nz, .n{k}",
+              "        ld a, (ix+3)", f"        sub (iy+{o + 3})", f"        jr z, .y{k}",
+              "        cp $FF", f"        jr c, .n{k}",
+              f".y{k}:   ld a, (ix+1)", f"        sub (iy+{o + 1})", "        cp $0E",
+              f"        jp c, .a{k}", "        cp $F3", f"        jp nc, .b{k}", f".n{k}:"]
+    L += ["        ld de, 77", "        add iy, de", "        ld de, 7", "        add iy, de",
+          "        ld b, 0", "        pop iy", "        ret"]
+    for k in range(12):
+        L += [f".a{k}:   ld b, {12 - k}", "        jr .ac"]
+    L += [".ac:    ld de, 7", "        jp $4214"]
+    for k in range(12):
+        L += [f".b{k}:   ld b, {12 - k}", "        jr .bc"]
+    L += [".bc:    ld de, 7", "        jp $421E"]
     (ROOT / "build" / "opt_scans.inc").write_text("\n".join(L) + "\n")
 
 
@@ -445,7 +468,8 @@ def speed_patches():
     # Object-table scans: unrolled (object_scans_inc).
     for at, entry, why in ((0x4076, OPT_COXY, "check_object_at_xy $4076"),
                            (0x48F5, OPT_CHS, "chomper_scan_apple $48F5"),
-                           (0x1F78, OPT_WOB, "trigger_apple_wobble $1F78")):
+                           (0x1F78, OPT_WOB, "trigger_apple_wobble $1F78"),
+                           (0x41E0, OPT_ALPHA, "alpha_advance $41E0")):
         put_bytes(at, bytes([0xC3, entry & 0xFF, entry >> 8]), f"{why} -> unrolled scan")
     # The handler's actor loop: unrolled (actor_loop_inc, opt_actors).
     put_bytes(0x00E9, bytes([0xC3, OPT_ACTORS & 0xFF, OPT_ACTORS >> 8]),
