@@ -929,6 +929,7 @@ font_len equ $-font
 
         include "build/opt_actors.inc"  ; (opt.asm: the handler's actor loop)
         include "opt_fill.asm"
+        include "build/opt_scans.inc"
         assert $ <= OPT_BASE
         ds OPT_BASE-$, $FF
         include "opt.asm"

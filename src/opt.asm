@@ -22,6 +22,9 @@ opt_table:
         jp opt_req1             ; +27 $5C66 bit 1 (the engine)
         jp opt_req2             ; +30 $02F1 bit 2 (game)
         jp snd_chout            ; +33 the engine's per-channel output $5C0F
+        jp opt_coxy             ; +36 check_object_at_xy $4076 (build/opt_scans.inc)
+        jp opt_chs              ; +39 chomper_scan_apple $48F5
+        jp opt_wob              ; +42 trigger_apple_wobble $1F78
 
 
 ; Sound tick: HL -> a request-flag byte with bit 0, 1 or 2 set, B = the
