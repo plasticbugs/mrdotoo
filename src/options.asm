@@ -235,24 +235,18 @@ opt_row:
         ret z
         push bc
         ld b, a
-.r:     ld a, (hl)              ; skip [mask, count, values x count, glyph
-        inc hl                  ; text x count]
-        ld c, (hl)
+        push de
+.r:     inc hl                  ; skip [mask, count, values x count, glyph
+        ld e, (hl)              ; text x count]: 2 + 5 x count bytes
         inc hl
-        ld a, l
-        add a, c
-        ld l, a
-        jr nc, .n
-        inc h
-.n:     ld a, l                 ; value texts: 4 chars each
-        add a, c
-        add a, c
-        add a, c
-        add a, c
-        ld l, a
-        jr nc, .n2
-        inc h
-.n2:    djnz .r
+        ld d, 0
+        add hl, de              ; the values
+        add hl, de              ; value texts: 4 chars each (16-bit adds,
+        add hl, de              ; the table may cross a page)
+        add hl, de
+        add hl, de
+        djnz .r
+        pop de
         pop bc
         ret
 
