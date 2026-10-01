@@ -607,6 +607,16 @@ check_screens:
         ld (scn_flush2), a
         ld (scn_lastn), a
         ld (scn_fill), a        ; fill its caches first
+        ld (scn_n), a           ; no tiles and a black band until its first
+        push hl                 ; build: the full redraw's flip flushes the
+        ld hl, SCN_BUF          ; band names, and the last band's (a second
+        ld de, SCN_BUF + 1      ; VERY GOOD) pointed at slots that now hold
+        ld bc, SCN_BUF_MAX - 1  ; the new set's font: letters in the band
+        ld (hl), a
+        ldir
+        call vgl_check          ; VERY GOOD: its sprites from the first
+        pop hl                  ; vblank (else one pass drew the arcade's
+                                ; round-end icon sprite)
         inc hl                  ; entry +14: the romhack logo (logo.asm)
         ld a, (hl)
         dec hl
