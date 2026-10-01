@@ -27,6 +27,7 @@ SCR_BANK0       equ 15          ; non-gameplay screens: sets, hashes, scene data
 SCR_INDEX       equ 16          ; bytes per scr_index entry
 SCR_EXTRA       equ 6           ; tools/gen_screens.py SCREENS order
 SCR_CONGRATS    equ 7
+HISCORE_SCR     equ 4           ; "hiscore" in tools/gen_screens.py SCREENS
 WONDER_SIG      equ $2D7        ; tools/data/screens/wonderful.txt "sig 2d7 2d"
 WONDER_TILE     equ $2D
 N_SCREENS       equ (scr_index_end - scr_index) / SCR_INDEX
@@ -633,14 +634,15 @@ check_screens:
         ld a, SAT_END
         out (VDP_DATA), a
         pop hl
-        xor a                   ; the sprites the last screen or the playfield
-        ld (ARC_SPRITES + 1), a ; left in the arcade's sprite RAM copy: gone
-        ld a, 1                 ; (the attract's high score table after the
-        ld (spr_new), a         ; demo cleared a level: the arcade stops
-                                ; copying, the maze's sprites stayed up).
-                                ; Masked in validation, read by no arcade
-                                ; code; a screen with sprites gets them back
-                                ; with the arcade's next copy
+        ld a, c                 ; the high score table: the sprites the
+        cp HISCORE_SCR          ; playfield left in the arcade's sprite RAM
+        jr nz, .spr             ; copy go (after the attract demo cleared a
+        xor a                   ; level the arcade stops copying: the maze's
+        ld (ARC_SPRITES + 1), a ; sprites stayed up). Only there: VERY GOOD's
+        inc a                   ; icons are copied before it is recognised,
+        ld (spr_new), a         ; and are not copied again (its scene 1 icon
+.spr:                           ; went). Masked in validation, read by no
+                                ; arcade code
         ld a, $FF               ; forget the last lookup (new hash table)
         ld (scr_last), a
         ld (scr_last+1), a
