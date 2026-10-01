@@ -514,6 +514,8 @@ check_colourway:
         cp d
         jr z, .out              ; same tile set (colourways can share a pair)
 .new:   call leave_image
+        xor a                   ; (playfields are never centred: the sprite
+        ld (scr_xoff), a        ; pass reads it in every mode)
         ld a, (mode)            ; coming from a screen or an image: the
         sub MODE_PLAYFIELD      ; upload's blank frame stays black (between
         ld (up_black), a        ; two playfields it takes the new dirt colour)
@@ -629,7 +631,11 @@ check_screens:
         call vgl_check          ; VERY GOOD: its sprites from the first
         pop hl                  ; vblank (else one pass drew the arcade's
                                 ; round-end icon sprite)
-        inc hl                  ; entry +14: the romhack logo (logo.asm)
+        inc hl                  ; entry +15: x offset (centred screens)
+        inc hl
+        ld a, (hl)
+        ld (scr_xoff), a
+        dec hl                  ; entry +14: the romhack logo (logo.asm)
         ld a, (hl)
         dec hl
         call logo_start
@@ -728,7 +734,9 @@ upload_set:
         jr .hd
 .noh:   xor a                   ; a screen: no panel (its set overwrote the
         ld (hud_ok), a          ; HUD glyphs)
-        call hud_clear
+        ld a, (scr_xoff)        ; (a centred screen's redraw filled it)
+        or a
+        call z, hud_clear
 .hd:    xor a
         ld (up_pending), a
         call flip_pnt
@@ -993,15 +1001,56 @@ draw_run_scr:
         ld e, a
         call logo_cell
         call nc, scr_lookup
-        out (VDP_DATA), a
         pop hl
+        pop bc
+        call scr_edge           ; (a centred screen: edge cells repeated)
+        out (VDP_DATA), a
         ld a, l
         add a, 32
         ld l, a
         jr nc, .nc
         inc h
-.nc:    pop bc
-        djnz .cell
+.nc:    djnz .cell
+        ret
+
+; C = screen column (0-23) -> A = its name table column: in screen mode
+; moved scr_xoff to the right, except column 0, whose write starts at the
+; screen's left edge (scr_edge repeats it).
+scr_cellx:
+        ld a, (mode)
+        cp MODE_SCREEN
+        ld a, c
+        ret nz
+        or a
+        ret z
+        ld a, (scr_xoff)
+        add a, c
+        ret
+
+; A centred screen (index byte 15, tools/gen_screens.py CENTRED): its 24
+; columns sit scr_xoff tiles to the right and each row's first and last cell
+; is repeated out to the screen's edges. B = cells left in the run (24 = the
+; first, 1 = the last), A = the cell's code: an edge cell writes scr_xoff
+; extra copies, spaced (the display is on). Preserves A, BC, DE, HL.
+scr_edge:
+        push bc
+        ld c, a
+        ld a, b
+        cp 24
+        jr z, .edge
+        dec a
+        jr nz, .no
+.edge:  ld a, (scr_xoff)
+        or a
+        jr z, .no
+        ld b, a
+.f:     ld a, c
+        out (VDP_DATA), a
+        nop
+        nop
+        djnz .f
+.no:    ld a, c
+        pop bc
         ret
 
 ; HL -> bg tile of a cell. Returns A = the screen tile for its (bg attr,
@@ -1280,8 +1329,8 @@ draw_cell:
         add hl, hl
         add hl, hl
         add hl, hl
-        ld a, l
-        or c
+        call scr_cellx          ; (a centred screen's column)
+        or l
         ld l, a
         ld a, (flip_wait)       ; the hidden table while it waits to be shown
         or a
@@ -1296,6 +1345,7 @@ draw_cell:
         ld a, (mode)
         cp MODE_SCREEN
         jr nz, .pf
+        push bc                 ; (C = sx, for the edge cells)
         push de                 ; the romhack logo's cells (logo.asm):
         ld a, e                 ; D = screen row, E = column
         and $1F
@@ -1311,6 +1361,18 @@ draw_cell:
         call logo_cell
         pop de
         call nc, scr_lookup
+        pop bc
+        push af                 ; a centred screen's edge cell is repeated
+        ld a, c                 ; out to the screen's edge (scr_edge: B =
+        ld b, 24                ; 24 the first cell, 1 the last)
+        or a
+        jr z, .eb
+        ld b, 1
+        cp 23
+        jr z, .eb
+        inc b
+.eb:    pop af
+        call scr_edge
         out (VDP_DATA), a
         ret
 .pf:    ld a, (apl_cur_n)       ; a tiled apple's cell? (apples.asm)

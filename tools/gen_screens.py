@@ -59,9 +59,14 @@ SCREENS = ["instruction", "title", "wonderful", "verygood", "hiscore", "diamond"
 # Screens shown as a romhack image instead (tools/gen_images.py): name -> bank
 # (src/image.asm IMG_BANK_EXTRA = MC_FIXED - 2)
 IMAGES = {"extra": 29}
+# Screens drawn centred (src/render.asm scr_xoff): their 24 columns 4 to the
+# right, each row's edge cells repeated out to both sides (WONDERFUL: black
+# top, dirt below across the whole width, as on the arcade)
+CENTRED = {"wonderful"}
 # INDEX entry (16 bytes): sig cell (2), sig fg tile, cam, set bank, set address
 # (2), hash bank, hash page, band first screen row, band rows, pair hash bank
-# (0 = no band), slot base (= static tile count), image bank (0 = none), 2 spare
+# (0 = no band), slot base (= static tile count), image bank (0 = none), logo
+# kind, x offset in tiles (0 or 4)
 INDEX = 16
 
 
@@ -348,7 +353,8 @@ def main():
         assert not band or 0 <= row0 and row0 + nrows <= 24
         index += bytes([sig[0] & 0xFF, sig[0] >> 8, sig[1], cam, sb, sa & 0xFF, sa >> 8,
                         hb, ha >> 8, row0, nrows, pbank, nkept, IMAGES.get(name, 0),
-                        (2 if logo[0] == "clown" else 1) if logo else 0, 0])
+                        (2 if logo[0] == "clown" else 1) if logo else 0,
+                        4 if name in CENTRED else 0])
     data = banks.data()
     (OUT / "banks.bin").write_bytes(data)
     (OUT / "banks.inc").write_text(f"SCR_BANKS equ {len(data) // BANK}\n")

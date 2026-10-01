@@ -444,7 +444,8 @@ vgl_tc          equ vgl_on + 50     ;   column,
 vgl_tn          equ vgl_on + 51     ;   reason,
 vgl_tk          equ vgl_on + 52     ;   tile row 0-2,
 vgl_t0          equ vgl_on + 53     ;   its two codes
-        assert vgl_t0 + 1 < $2F00
+scr_xoff        equ vgl_on + 55     ; render.asm: a centred screen's x offset (tiles)
+        assert scr_xoff < $2F00
         assert high vgl_ic == high (vgl_ic + 9) && high vgl_mk == high (vgl_mk + 5)
         assert high ARC_SPRITES == high (ARC_SPRITES + 127)
 vgl_icons:

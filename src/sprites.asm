@@ -150,7 +150,10 @@ sprites_update:
         jr nz, .nap             ; (cp leaves carry for codes below it)
         call apple_try
         jp c, .skip
-.nap:   ld a, (hl)              ; Y
+.nap:   ld a, (scr_xoff)        ; a centred screen (render.asm): 4 tiles
+        or a                    ; right, x = 256 - Y (never early clock)
+        jr nz, .xo
+        ld a, (hl)              ; Y
         cpl
         sub 31                  ; screen x = 224 - Y
         jr c, .ec
@@ -162,6 +165,10 @@ sprites_update:
         jp c, .skip             ; entirely off the left
         add a, 32               ; early clock: the TMS9918 shifts it 32 left
         ld b, $80
+        jr .xok
+.xo:    ld a, (hl)
+        neg
+        ld b, 0
 .xok:   inc e
         ld (de), a              ; x
         dec e
