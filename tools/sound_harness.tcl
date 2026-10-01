@@ -7,12 +7,20 @@
 # - The game stays in its attract sequence (no coin): it never posts a sound
 #   there ($02D9/$02EA return unless $E000 bit 7 is set), so the engine sees
 #   only these requests, whatever speed the game logic runs at. (Freezing the
-#   arcade handler instead broke the vblank delivery: an NMI storm.)
+#   arcade handler instead broke the vblank delivery: an NMI storm.) Its stop
+#   entry $02EA has no such check, so it becomes a `ret` (the attract posts
+#   stops at times that depend on game speed: the engine RAM differed), and
+#   so does its reset-all-sounds routine $5A80 (called from $11E4 / $194E /
+#   $22E7 as the attract runs).
 # - Requests as the game posts them: $02D9 = state[$EC00 + id] = 1, $02EA =
 #   set 2 (stop); plus snd_req, the fast-path flag.
-# - Log lines: "v <vblank> <ram hash>" for each vblank (sound work RAM
-#   $6C00-$6DFF, crc32), "r <id>" / "s <id>" for requests/stops, "w <port> <value>"
-#   for each write to the SN76489 ($FF) or the SGM AY ($50 address, $51 data).
+# - Counted in engine ticks, not vblanks: the NMI owes and catches up ticks
+#   when it is busy (snd_due), so ticks per vblank depend on CPU timing. Each
+#   tick k gets its requests just before it runs (breakpoint at $5A90).
+# - Log lines: "v <tick> <ram crc>" per tick (the engine's work RAM
+#   $EC00-$EFFF = CV $6C00-$6FFF, as the tick starts), "r <id>" / "s <id>"
+#   for requests/stops, "w <port> <value>" for each write to the SN76489
+#   ($FF) or the SGM AY ($50 address, $51 data).
 set ::mrdo_sym $::env(MRDO_SYM)
 proc symaddr {name} {
     set f [open $::mrdo_sym]
@@ -49,8 +57,8 @@ debug set_watchpoint write_io 0x51 {} { wlog 51 }
 proc vb {} {
     if {!$::on} return
     incr ::v
-    if {$::v % 2000 == 0} { puts stderr "harness vblank $::v / $::end"; flush $::out }
-    puts $::out "v $::v [format %08x [zlib crc32 [debug read_block memory 0x6C00 512]]]"
+    if {$::v % 2000 == 0} { puts stderr "harness tick $::v / $::end"; flush $::out }
+    puts $::out "v $::v [format %08x [zlib crc32 [debug read_block memory 0x6C00 1024]]]"
     if {[dict exists $::sched $::v]} {
         foreach e [dict get $::sched $::v] {
             lassign $e k id
@@ -63,6 +71,6 @@ proc vb {} {
     if {[peek 0x6000] & 0x80} { puts stderr "harness: the game started (\$E000 bit 7)"; close $::out; exit }
     if {$::v >= $::end} { close $::out; exit }
 }
-debug set_bp [symaddr nmi] {} vb
+debug set_bp 0x5A90 {} vb
 set throttle off
-after time 2 { set ::on 1 }
+after time 2 { poke 0x02EA 0xC9; poke 0x5A80 0xC9; set ::on 1 }

@@ -250,6 +250,7 @@ OPT_COXY = OPT_BASE + 36
 OPT_CHS = OPT_BASE + 39
 OPT_WOB = OPT_BASE + 42
 OPT_BSEG = OPT_BASE + 45
+OPT_SILPASS = OPT_BASE + 48
 OPT_SCAN = []               # (alpha_advance's loop is unrolled now: object_scans_inc)
 OPT_ALPHA = OPT_BASE + 6
 
@@ -264,6 +265,11 @@ def sound_patches():
     for a, entry, chip in ((0x5AE7, OPT_SND_W1, 1), (0x5AEE, OPT_SND_W2, 2)):
         assert ORIG[a:a + 3] == bytes([0x32, 0x00 + chip, 0x98])
         put_bytes(a, bytes([0xCD, entry & 0xFF, entry >> 8]), f"ld ($980{chip}),a -> call snd_w{chip}")
+    # The tick's silencing pass ($5ADD-$5AF5, two calls a channel above):
+    # native (sound.asm snd_silpass, the same checks and writes in order).
+    assert ORIG[0x5ADD:0x5AF6].hex() == "3a74ec473e9fcb003803320198cb00380332029 8c62030eec9".replace(" ", "")
+    put_bytes(0x5ADD, bytes([0xC3, OPT_SILPASS & 0xFF, OPT_SILPASS >> 8]),
+              "sound tick silencing pass -> snd_silpass (native)")
     # The engine's per-channel output ($5C0E-$5C53: 2-3 chip bytes for every
     # active channel, every tick, all repeats) goes through snd_chout, which
     # writes a channel only when its bytes changed (sound.asm).

@@ -329,6 +329,108 @@ snd_tone:
         ld (snd_tvolc), a
         jp ay_chan_c
 
+; The engine's silencing pass ($5ADD-$5AF5, every tick: a volume-off byte for
+; each of the 8 channels whose bit in $EC74 is clear, in the order chip 1 ch 0,
+; chip 2 ch 0, chip 1 ch 1, ..., chip 1 noise, chip 2 noise), native: the same
+; checks and writes as snd_sil1 / snd_sil2 -> snd_w1 / snd_w2 made one by one
+; (a tone channel silenced already is skipped; noise channels always written),
+; without their calls and register saves. Registers are dead after it (the
+; tick's `ret`). Clobbers AF, BC, DE, HL.
+snd_silpass:
+        ld a, (ARC_WORK + $C74)  ; ($EC74)
+        ld b, a                 ; B = channels in use
+        ld a, (SND_SIL)
+        ld c, a                 ; C = tone channels silenced already
+        bit 7, b                ; chip 1 ch 0
+        jr nz, .a0
+        bit 0, c
+        jr nz, .a0
+        ld e, 1
+        ld a, $9F
+        call .sn
+.a0:    bit 6, b                ; chip 2 ch 0
+        jr nz, .b0
+        bit 3, c
+        jr nz, .b0
+        ld e, 8
+        ld a, $9F
+        ld d, 8                 ; AY R8
+        call .ay
+.b0:    bit 5, b                ; chip 1 ch 1
+        jr nz, .a1
+        bit 1, c
+        jr nz, .a1
+        ld e, 2
+        ld a, $BF
+        call .sn
+.a1:    bit 4, b                ; chip 2 ch 1
+        jr nz, .b1
+        bit 4, c
+        jr nz, .b1
+        ld e, 16
+        ld a, $BF
+        ld d, 9
+        call .ay
+.b1:    bit 3, b                ; chip 1 ch 2
+        jr nz, .a2
+        bit 2, c
+        jr nz, .a2
+        ld e, 4
+        ld a, $DF
+        call .sn
+.a2:    bit 2, b                ; chip 2 ch 2 (AY channel C: shared with noise)
+        jr nz, .b2
+        bit 5, c
+        jr nz, .b2
+        ld e, 32
+        call .rec
+        ld a, $DF
+        ld (snd_lat2), a
+        xor a
+        ld (snd_tvolc), a
+        call ay_chan_c
+.b2:    bit 1, b                ; chip 1 noise: always
+        jr nz, .a3
+        ld a, $FF
+        ld (snd_lat1), a
+        out (SN_PORT), a
+.a3:    bit 0, b                ; chip 2 noise: always
+        ret nz
+        ld a, $FF
+        ld (snd_lat2), a
+        xor a
+        ld (snd_nvol2), a
+        jp ay_chan_c
+; E = the channel's bit: silenced now, its record no longer what the chip has.
+.rec:   ld a, (SND_SIL)
+        or e
+        ld (SND_SIL), a
+        ld a, e
+        cpl
+        ld e, a
+        ld a, (SND_VALID)
+        and e
+        ld (SND_VALID), a
+        ret
+; A = the SN volume-off byte, E = the bit (snd_w1's volume path).
+.sn:    push af
+        call .rec
+        pop af
+        ld (snd_lat1), a
+        out (SN_PORT), a
+        ret
+; A = the chip 2 volume-off byte, E = the bit, D = the AY volume register
+; (snd_w2's volume path: attenuation 15 -> AY volume 0).
+.ay:    push af
+        call .rec
+        pop af
+        ld (snd_lat2), a
+        ld a, d
+        out (SGM_AY_ADDR), a
+        xor a
+        out (SGM_AY_WRITE), a
+        ret
+
 ; The engine's own silencing of unused channels ($5AE7 / $5AEE: every tick, a
 ; volume-off byte for each channel not playing): once is enough until the
 ; channel is written again (snd_chout clears the bit); its record is no
