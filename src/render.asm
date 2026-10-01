@@ -473,6 +473,7 @@ check_colourway:
         ld (cw_valid), a        ; is forgotten so the next maze is found
         dec a
         ld (cw_attr), a
+        ld (cw_tile), a         ; (and check_screens's repaint guard passes)
         ld a, ARC_HI_BANK
         call select_bank
         jp check_screens
@@ -517,6 +518,8 @@ check_colourway:
         jp check_screens
 .found: ld a, 1
         ld (cw_valid), a
+        ld a, b                 ; (the pair's attribute too: check_screens)
+        ld (cw_vattr), a
         ld a, c
         ld (dirt_tile), a
         ld a, d
@@ -571,6 +574,18 @@ check_screens:
         ld a, (cw_valid)
         or a
         ret nz
+        ld a, (mode)            ; the playfield mid-repaint (a chomper session
+        cp MODE_PLAYFIELD       ; starting or ending: the arcade rewrites the
+        jr nz, .scr             ; attributes, then the tiles): the pair still
+        ld a, (cw_tile)         ; shares its tile or its attribute with the
+        ld hl, dirt_tile        ; colourway on screen. Not a screen: maze
+        cp (hl)                 ; cells can hold a screen's signature tile
+        ret z                   ; (the instruction screen's $8B at $2A7 is a
+        ld a, (cw_attr)         ; tunnel piece: it blacked the field)
+        ld hl, cw_vattr
+        cp (hl)
+        ret z
+.scr:
         ld a, (scr_hold)        ; just wiped: its signature cell may still be
         or a                    ; there for a moment
         jr z, .look
