@@ -426,6 +426,7 @@ vgl_hide:
 ; picture's 10; WONDERFUL (ico_tick): from entry 0. Then the end.
 ico_on          equ vgl_on + 42     ; WONDERFUL: icons up (the sprite pass waits)
 ico_step        equ vgl_on + 43     ;   0 = layers not uploaded yet
+scr_miss        equ vgl_on + 44     ; render.asm: the last lookup missed the hash
 scr_xoff        equ vgl_on + 55     ; render.asm: a centred screen's x offset (tiles)
         assert scr_xoff < $2F00
         assert high ARC_SPRITES == high (ARC_SPRITES + 127)

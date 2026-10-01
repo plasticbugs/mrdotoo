@@ -1107,19 +1107,49 @@ scr_lookup:
         inc l
         ld (hl), e
         call scr_find
-        jr c, .done
+        jr c, .hit
         push de                 ; never seen in the capture (the scene's
         ld de, $0000 + BLANK_BG ; details can differ from it): the cell's
         call scr_find           ; background alone, then its foreground
         pop de                  ; alone, then black
-        jr c, .done
+        jr c, .miss
         push bc
         ld bc, $0000 + BLANK_BG
         call scr_find
         pop bc
-        jr c, .done
+        jr c, .miss
         xor a
+.miss:  push af                 ; (scr_miss: clown_keep)
+        ld a, 1
+        jr .m
+.hit:   push af
+        xor a
+.m:     ld (scr_miss), a
+        pop af
 .done:  ld (scr_last + 4), a
+        ret
+
+; After a cell's lookup in draw_cell: Z = leave the cell as it is. On the
+; diamond screen the arcade's own clown slides in from the right across the
+; text (its tiles, never captured, miss the hash); the romhack clown stands in
+; its box instead, so those writes would only knock holes in the text. The
+; arcade redraws the text once its clown has passed. Preserves A.
+clown_keep:
+        push bc
+        ld c, a
+        ld a, (logo_on)
+        cp 2
+        jr nz, .no
+        ld a, (scr_miss)
+        or a
+        jr z, .no
+        ld a, c
+        cp a                    ; Z
+        pop bc
+        ret
+.no:    or 1                    ; NZ
+        ld a, c
+        pop bc
         ret
 
 ; B, C, D, E = bg attr, bg tile, fg attr, fg tile -> carry and A = the code
@@ -1368,8 +1398,13 @@ draw_cell:
         ld e, c
         call logo_cell
         pop de
-        call nc, scr_lookup
-        pop bc
+        jr c, .lg
+        call scr_lookup
+        call clown_keep
+        jr nz, .lg
+        pop bc                  ; (the arcade's sliding clown: keep the text)
+        ret
+.lg:    pop bc
         push af                 ; a centred screen's edge cell is repeated
         ld a, c                 ; out to the screen's edge (scr_edge: B =
         ld b, 24                ; 24 the first cell, 1 the last)

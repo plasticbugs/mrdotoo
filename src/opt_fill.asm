@@ -60,18 +60,23 @@ fill_046c:
 
 ; Z = fill_046c may store directly. Clobbers AF, HL.
 fill_fast:
-        ld a, (mode)
-        cp MODE_SCREEN
-        jr nz, .m
         ld a, b                 ; a screen being wiped whole (32 columns, 24+
         cp 32                   ; rows: the arcade clearing it for what comes
-        jr nz, .band            ; next)? The display goes black until the next
+        jr nz, .part            ; next)? The display goes black until the next
         ld a, c                 ; tile set is up (render_body, go_black), so
-        cp 24                   ; the band no longer matters
-        jr c, .band
-        ld a, 1
+        cp 24                   ; a band no longer matters. The playfield too
+        jr c, .part             ; (a round's end into CONGRATULATIONS: its
+        ld a, (mode)            ; sprites, HUD and first letters showed on the
+        cp MODE_SCREEN          ; wiped maze until the screen was recognised)
+        jr z, .wipe
+        cp MODE_PLAYFIELD
+        jr nz, .m
+.wipe:  ld a, 1
         ld (blank_req), a
         jr .m
+.part:  ld a, (mode)
+        cp MODE_SCREEN
+        jr nz, .m
 .band:  ld a, (scn_pbank)
         or a
         ret nz
