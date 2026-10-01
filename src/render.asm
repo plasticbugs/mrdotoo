@@ -186,6 +186,7 @@ render_init:
         xor a
         ld (vgl_on), a
         ld (ico_on), a          ; (vgland.asm: WONDERFUL's icons)
+        ld (live_state), a      ; (live.asm: no switch armed)
         ld (scr_xoff), a        ; (no centred screen)
         ld (nmi_late), a
         ld (img_d), a
@@ -281,6 +282,7 @@ render_body:
         ld a, (scr_hbank)
 .bank:  call select_bank
         call apple_sync         ; resting apples as tiles (apples.asm)
+        call live_tick          ; a tile set switch's remaining codes (live.asm)
         call camera_update
         ld a, (redraw_all)
         or a
@@ -295,7 +297,8 @@ render_body:
         ld (rd_wait), a
         cp RD_WAIT_MAX
         jp c, .done
-.start: xor a
+.start: call live_finish        ; (a tile set switch's rest first: the redraw
+        xor a                   ; may use any code)
         ld (q_busy), a
         ld (rd_wait), a
         ld (redraw_all), a
@@ -343,6 +346,8 @@ render_body:
         call z, hud_redraw
         jr .done
 .upload:
+        call live_try           ; between two playfield sets: switched at the
+        jr c, .done             ; next vblank with the display on (live.asm)
         ld a, (ARC_WORK)        ; the dessert sequence ($E000 bit 3; the field
         bit 3, a                ; turns to the chomper colours while Mr. Do is
         jr z, .up               ; still shown): the upload's blank frame would
@@ -388,6 +393,7 @@ screen_black:
 go_black:
         xor a
         ld (blank_req), a
+        ld (live_state), a
         call leave_image        ; (an image or the VERY GOOD characters)
         call vgl_leave
         ld a, VDP_R1_ON & ~$40
@@ -682,6 +688,8 @@ check_screens:
 upload_start:
         ld (up_bank), a
         ld (up_set), hl
+        xor a                   ; (an armed live switch is for another set)
+        ld (live_state), a
         ld a, 1
         ld (up_pending), a
         ld (redraw_all), a
@@ -1380,6 +1388,7 @@ draw_cell:
         ld a, (pnt_back)
 .front: add a, h
         ld h, a
+        ld (live_va), hl        ; (live_out sets it again)
         call vdp_set_write
         ld hl, ARC_VRAM + $400
         add hl, de              ; bg tile
@@ -1437,8 +1446,7 @@ draw_cell:
         ld a, c                 ; screen column
         call apple_at
         jr nc, .pf2
-        out (VDP_DATA), a
-        ret
+        jp live_out             ; (a tile set switch's pending code first)
 .pf2:   ld a, (dirt_tile)
         ld c, a
         ld a, (tbl_page)
@@ -1448,12 +1456,10 @@ draw_cell:
         jr z, .dirt
         call not_dirt
         jr nc, .dirt
-        out (VDP_DATA), a
-        ret
+        jp live_out
 .dirt:  ld a, h
         add a, 8
         ld h, a
         ld e, (hl)              ; fg tile
         ld a, (de)
-        out (VDP_DATA), a
-        ret
+        jp live_out

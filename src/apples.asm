@@ -67,6 +67,9 @@ apple_try:
         ld a, (rd_row)
         cp PF_ROWS
         jp c, .no
+        ld a, (up_pending)      ; (a tile set switch waiting for its vblank,
+        or a                    ; live.asm: the table on screen is the old
+        jp nz, .no              ; one until it flips)
         inc l
         ld a, (hl)              ; colour line 5, not flipped
         dec l
@@ -395,6 +398,9 @@ apl_redraw4:
         cp PF_ROWS
         jr c, apl_queue4
         ld a, (flip_wait)
+        or a
+        jr nz, apl_queue4
+        ld a, (up_pending)      ; (a tile set switch about to flip, live.asm)
         or a
         jr nz, apl_queue4
         ld d, 0

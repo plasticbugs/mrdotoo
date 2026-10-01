@@ -208,10 +208,15 @@ hud_redo:       ds 1            ; render.asm: repaint the HUD panel once the dis
         incbin "build/screens/banks.bin", n*$4000, $4000
         edup
 
-        dup MC_FIXED-17-SCR_BANKS, n    ; free
+        dup MC_FIXED-18-SCR_BANKS, n    ; free
         org $C000
         ds $10000-$, $FF
         edup
+
+        org $C000                       ; bank 28 (OPT_BANK): the options screen
+        include "options_b.asm"         ; (options.asm opt_nmi maps it)
+        assert $ <= $FFC0               ; (the MegaCart hotspot)
+        ds $10000-$, $FF
 
         org $C000                       ; bank 29 (IMG_BANK_EXTRA): the romhack's
         incbin "build/images/extra.bin" ; EXTRA screen (tools/gen_images.py)
@@ -428,6 +433,7 @@ nmi:
         in a, (VDP_CTRL)        ; code may be between the two bytes of an
         ld a, 1                 ; address (the write then lands elsewhere).
         ld (in_nmi), a          ; The interrupted NMI acks it when done.
+        call live_vblank        ; an armed tile set switch: now, in the blank
 
         ld a, i                 ; P/V = IFF2: the arcade was not inside its
         ld a, 0                 ; handler (idle loop or pathfinder), so its
@@ -939,6 +945,7 @@ font_len equ $-font
         include "logo.asm"
         include "apples.asm"
         include "options.asm"
+        include "live.asm"
         include "build/screens/logo.inc"
         include "build/tiles/hud.inc"
 
