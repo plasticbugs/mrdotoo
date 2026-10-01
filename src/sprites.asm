@@ -474,6 +474,33 @@ spr_pin:
         add a, pin_attr - pin_code
         ld l, a
         ld (hl), c
+        ld a, b                 ; a white overlay (sat_begin) takes a sprite
+        cp $40                  ; on Mr. Do's lines too: count its bands, or
+        jr nc, .full            ; Mr. Do + 3 looked uncrowded and the 5th
+        add a, low SPR_WHITE    ; (a pushed apple) stayed dropped for good
+        ld l, a
+        ld h, high SPR_WHITE
+        ld a, (hl)
+        or a
+        jr z, .full
+        ld a, e                 ; its y = Mr. Do's (list entry, DE -> colour)
+        sub 3
+        ld l, a
+        ld h, d
+        ld a, (hl)
+        add a, 17               ; the same three bands as the entry
+        rrca
+        rrca
+        rrca
+        and $1F
+        add a, low band_cnt
+        ld l, a
+        ld h, high band_cnt
+        inc (hl)
+        inc l
+        inc (hl)
+        inc l
+        inc (hl)
 .full:  pop hl
         pop bc
         pop af
@@ -579,9 +606,12 @@ spr_emit:
 .rok:   ld (crowd_rot), a
         ld c, a                 ; C = rotation (0 .. n-1)
         ld a, (crowd_dir)       ; every other pass the other way round: with
-        xor 1                   ; only rotation, a count that is a multiple
+        inc a                   ; only rotation, a count that is a multiple
         ld (crowd_dir), a       ; of 3 kept a sprite in the same places for
-        jr z, .rot              ; a while (an apple gone for several frames);
+        rrca                    ; a while (an apple gone for several frames);
+        jr nc, .rot             ; (bit 0: the byte is never initialised; it
+                                ; boots as the image's $FF padding, and the
+                                ; old `xor 1` test never alternated from it)
         ld a, c                 ; reversed, whatever came last comes first:
         or a                    ; c-1 .. 0, then n-1 .. c
         jr z, .bk2
