@@ -185,6 +185,8 @@ vh_hl_n:                        ; rst $30 + inline byte: ld (hl),n
 render_init:
         xor a
         ld (vgl_on), a
+        ld (ico_on), a          ; (vgland.asm: WONDERFUL's icons)
+        ld (scr_xoff), a        ; (no centred screen)
         ld (nmi_late), a
         ld (img_d), a
         ld (up_black), a
@@ -240,6 +242,12 @@ render_body:
         ld a, (vgl_on)          ; (the VERY GOOD picture has its own sprites)
         or a
         jr nz, .nospr
+        ld a, (ico_on)          ; (WONDERFUL: only its icon, vgland.asm)
+        or a
+        jr z, .noico
+        call ico_tick
+        jr .nospr
+.noico:
         ld a, (logo_on)         ; (so has the romhack clown)
         cp 2
         call nz, sprites_update ; first, inside vblank
@@ -629,8 +637,8 @@ check_screens:
         ld (hl), a
         ldir
         call vgl_check          ; VERY GOOD: its sprites from the first
-        pop hl                  ; vblank (else one pass drew the arcade's
-                                ; round-end icon sprite)
+        call ico_check          ; vblank (else one pass drew the arcade's
+        pop hl                  ; round-end icon sprite); WONDERFUL's icon
         inc hl                  ; entry +15: x offset (centred screens)
         inc hl
         ld a, (hl)

@@ -78,6 +78,12 @@ VG_COL, VG_ROW = 5, 16
 RH_COL, RH_ROW = 10, 17
 
 
+# The arcade's round-end icon sprites, in vgl_icon's reason order: its table
+# at $7C81 (code, colour line): creep $2D/2, cherries $6E/13, diamond $69/7,
+# EXTRA (letter monster) $51/4
+ARC_ICONS = [(0x2D, 2), (0x6E, 13), (0x69, 7), (0x51, 4)]
+
+
 def vgland():
     """build/images/vgland.bin (bank 29 at $E000, src/vgland.asm):
       +$000 patterns of tiles $01-$3B (59 x 8)   +$200 their colours
@@ -86,13 +92,12 @@ def vgland():
       +$700 frame 1 SAT (10 x 4, $D0)            +$730 frame 2 SAT
       +$760 frame 1 names, 14 x 5 (romhack tile numbers, 0 = black)
       +$7B0 frame 2 names, rows 3-4 of the block, 14 x 2
-      +$800 patterns of the icon tiles $3C-$51 (22 x 8)  +$A00 their colours
-      +$B00 per round-end reason 1-4 (monsters, cherries, diamond, EXTRA)
-            the icon's 2 x 3 names (icon tile index + 1, 0 = black)
-      +$B18 per reason: overlay sprite pattern (0 = none), its SAT Y minus
-            the icon's top line
-    The romhack's per-scene completion icons (PRINT_ICON), drawn where the
-    arcade queues its icon sprite."""
+      +$800 the arcade's round-end icons as sprites (ARC_ICONS): per reason
+            0-3 (creep, cherries, diamond, EXTRA) 3 one-colour layers, one per
+            arcade pen, 32 bytes each (SPT patterns VGL_SPRS..)
+      +$B00 their TMS colours, reason * 3 + layer (0 = no such layer)
+    Drawn where the arcade queues its icon sprite (src/vgland.asm vgl_icons),
+    on VERY GOOD and WONDERFUL."""
     pt = H.pletter(H.db_block(H.CORE, "intermission_char"))
     ct = H.pletter(H.db_block(H.CORE, "intermission_color"))
     spt = H.pletter(H.db_block(H.CORE, "intermission_sprites"))
@@ -106,15 +111,18 @@ def vgland():
     blob[0x000:0x000 + 59 * 8] = pt[8:60 * 8]
     blob[0x200:0x200 + 59 * 8] = ct[8:60 * 8]
     blob[0x400:0x400 + 704] = spt[:704]
-    blob[0x800:0x800 + 22 * 8] = pt[0x3C * 8:0x52 * 8]
-    blob[0xA00:0xA00 + 22 * 8] = ct[0x3C * 8:0x52 * 8]
-    for r, name in enumerate(("MONSTER_ICON", "CHERRY_ICON", "DIAMOND_ICON", "EXTRA_ICON")):
-        ic = db_exprs(H.CORE, name)
-        assert len(ic) == 6 and all(t == 0 or 0x3C <= t <= 0x51 for t in ic)
-        blob[0xB00 + r * 6:0xB06 + r * 6] = bytes(t - 0x3B if t else 0 for t in ic)
-    # CHERRY_Y_POS / MONSTER_Y_POS (5 / 4 over icon rows at 8): drawn 2 / 3
-    # lines above the icon's top (the TMS9918 draws SAT Y + 1)
-    blob[0xB18:0xB20] = bytes([84, (-4) & 0xFF, 80, (-3) & 0xFF, 0, 0, 0, 0])
+    _, _, gfx3, proms = H.load_all()
+    sprites, pal = H.decode_sprites(gfx3), H.build_palette(proms)
+    for r, (code, line) in enumerate(ARC_ICONS):
+        rgb = H.sprite_rgb(proms, pal, line)
+        art = H.msx_sprite(sprites[code])
+        pens = sorted({v for row in art for v in row if v})
+        assert len(pens) <= 3
+        for k, pen in enumerate(pens):
+            mask = [[1 if v == pen else 0 for v in row] for row in art]
+            o = 0x800 + (r * 3 + k) * 32
+            blob[o:o + 32] = H.tms_sprite_bytes(mask)
+            blob[0xB00 + r * 3 + k] = H.tms_index(rgb[pen])
     for k, s in enumerate(sp):
         sat = bytearray()
         for i in range(10):
