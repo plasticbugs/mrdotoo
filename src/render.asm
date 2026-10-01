@@ -248,9 +248,12 @@ render_body:
         call ico_tick
         jr .nospr
 .noico:
-        ld a, (logo_on)         ; (so has the romhack clown)
-        cp 2
-        call nz, sprites_update ; first, inside vblank
+        ld a, (logo_on)         ; (so has the romhack clown: its sprites and
+        cp 2                    ; the coin here too, logo.asm clown_spr)
+        jr z, .clw
+        call sprites_update     ; first, inside vblank
+        jr .nospr
+.clw:   call clown_spr
 .nospr:
         call late_ack
         call check_colourway

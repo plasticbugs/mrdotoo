@@ -301,21 +301,48 @@ clown_tick:
         ld (clw_tcol), a
         ld a, LOGO_BANK         ; (the clown's data again)
         call select_bank
-        jr clown_sat
-.run:   ld a, (frame_cnt)       ; then a frame every 8 vblanks
+        call clown_sat
+        jp clown_token
+.run:   ret                     ; (running: clown_spr, early in the vblank)
+
+; Each vblank of the running clown screen, in the sprite pass's place at the
+; start of the vblank: a new frame every 8 vblanks (the box's diamond rows,
+; the 15 sprites), and the token. From logo_tick, late in the NMI, a busy
+; vblank pushed these writes into the picture: the falling coin tore (a
+; yellow fragment for a frame). Preserves the mapped bank.
+clown_spr:
+        ld a, (clw_step)
+        cp 6
+        ret nz
+        ld a, (cur_bank)
+        push af
+        ld a, LOGO_BANK
+        call select_bank
+        call .go
+        pop af
+        jp select_bank
+.go:    ld a, (frame_cnt)       ; a frame every 8 vblanks
         and 7
-        jp nz, clown_token
+        jr nz, .tok
         ld a, (clw_fr)
         inc a
         cp 3
         jr c, .f
         xor a
 .f:     ld (clw_fr), a
+        call clown_sat          ; (sprites first: the beam is still above)
+        call .tok
         ld a, (pnt_front)       ; the box's diamond rows
         call clown_token.rows
         ld a, (pnt_back)
-        call clown_token.rows
-        ; fall through
+        jp clown_token.rows
+.tok:   ld a, (spr_new)         ; the token: only from a finished sprite RAM
+        or a                    ; copy (opt_spr_copy; an overrunning handler
+        ret z                   ; can be mid-copy here: its Y and X from two
+        xor a                   ; frames tore the coin), as the sprite pass
+        ld (spr_new), a         ; does; else it stays where it is
+        jp clown_token
+
 ; The current frame's 15 sprites.
 clown_sat:
         ld hl, VR_SAT + 4       ; entries 1-15 (0 is the token's: on top)
@@ -334,7 +361,8 @@ clown_sat:
         nop
         nop
         djnz .s
-        ; fall through
+        ret
+
 ; SAT entry 0: the arcade's token (the credit coin dropping), wherever its
 ; sprite RAM has it, else hidden. First in the SAT so it is drawn over the
 ; romhack's sprites and never loses a line to the 4-sprites limit.
