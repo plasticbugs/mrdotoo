@@ -69,8 +69,14 @@ proc vb {} {
         }
     }
     if {[peek 0x6000] & 0x80} { puts stderr "harness: the game started (\$E000 bit 7)"; close $::out; exit }
-    if {$::v >= $::end} { close $::out; exit }
+    if {$::v >= $::end} { close $::out; puts stderr [format "COST %d ticks, %.0f T a tick" $::v [expr {$::cost * 3579545.0 / $::v}]]; exit }
 }
 debug set_bp 0x5A90 {} vb
+# Engine cost: emulated time from the tick's entry to its return (the `jr`
+# after `call SND_TICK` in snd_nmi_tick), summed: printed at the end in
+# T-states (3.579545 MHz). Deterministic for a given ROM and schedule.
+set ::cost 0.0; set ::t0 0
+debug set_bp 0x5A90 {} { set ::t0 [machine_info time] }
+debug set_bp [expr {[symaddr snd_nmi_tick.done] - 2}] {} { if {$::on && $::t0 > 0} { set ::cost [expr {$::cost + [machine_info time] - $::t0}] } }
 set throttle off
 after time 2 { poke 0x02EA 0xC9; poke 0x5A80 0xC9; set ::on 1 }

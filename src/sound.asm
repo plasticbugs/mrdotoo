@@ -136,32 +136,23 @@ SND_SIL         equ SND_SHAD + 14   ; bit n: silenced by the engine since
         assert unc_idx + 32 <= SND_SHAD && SND_SIL < dirty_q
 snd_chout:
         ld c, a
-        and 6
+        and 7                   ; chip (bit 0) | channel (bits 1-2)
         cp 6
-        jp z, .write            ; noise: always
-        rrca                    ; channel 0-2
-        ld e, a
-        bit 0, c
-        jr z, .c0
-        add a, 3                ; chip 1: 3-5
-.c0:    ld e, a                 ; E = record index
+        jp nc, .write           ; noise: always
         add a, a
-        add a, low SND_SHAD
+        add a, low snd_chtab    ; its record and bit (snd_chtab)
         ld l, a
+        ld h, high snd_chtab
+        ld e, (hl)              ; E = the record's low byte
+        inc l
+        ld b, (hl)              ; B = its bit
+        ex de, hl               ; HL -> the record (L = E)
         ld h, high SND_SHAD
-        ld a, e                 ; B = its bit
-        ld b, 1
-        or a
-        jr z, .bit
-.sh:    sla b
-        dec a
-        jr nz, .sh
-.bit:   ld a, c                 ; class of this type: other ($20-$2F) or tone
+        ld a, c                 ; class of this type: other ($20-$2F) or tone
         and $38
-        cp $20
+        sub $20
+        cp $10
         ld d, 0
-        jr c, .cl
-        cp $30
         jr nc, .cl
         ld d, b                 ; D = B if "other"
 .cl:    ld a, (SND_VALID)
@@ -244,6 +235,39 @@ snd_chout:
         or (iy+9)
         or $10
         jr .out
+
+; (iy+0) & 7 (chip | channel << 1, tone channels) -> its record's low byte
+; and bit (record = chip * 3 + channel), at an even offset: 2 bytes a slot.
+snd_chtab:
+        db low (SND_SHAD + 0), 1        ; chip 0 ch 0
+        db low (SND_SHAD + 6), 8        ; chip 1 ch 0
+        db low (SND_SHAD + 2), 2        ; chip 0 ch 1
+        db low (SND_SHAD + 8), 16       ; chip 1 ch 1
+        db low (SND_SHAD + 4), 4        ; chip 0 ch 2
+        db low (SND_SHAD + 10), 32      ; chip 1 ch 2
+        assert high snd_chtab == high ($ - 1)
+
+; The engine's per-sound output loop ($5BFA-$5C5C: every channel of the sound
+; that has one, snd_chout), native: the same walk over the voice slots (10
+; bytes each, empty ones skipped) and the same calls. IY -> the sound's work
+; area; registers are dead after it (the caller pops HL and reloads IX, IY).
+snd_outloop:
+        ld b, (iy+1)
+        inc iy
+        inc iy
+        ld de, 10
+.sl:    ld a, (iy+0)
+        and a
+        jr nz, .ch
+        add iy, de
+        jr .sl
+.ch:    push bc
+        call snd_chout
+        pop bc
+        ld de, 10
+        add iy, de
+        djnz .sl
+        ret
 
 ; A tone channel's three bytes (latch | (iy+9) high nibble, (iy+8),
 ; volume | (iy+9) low nibble) straight to the chip: the same port writes and

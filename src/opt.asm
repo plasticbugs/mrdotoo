@@ -27,6 +27,7 @@ opt_table:
         jp opt_wob              ; +42 trigger_apple_wobble $1F78
         jp opt_bseg             ; +45 draw_ball_segment $2CEB (opt_ball.asm)
         jp snd_silpass          ; +48 the sound tick's silencing pass $5ADD (sound.asm)
+        jp snd_outloop          ; +51 the per-sound output loop $5BFA (sound.asm)
 
 
 ; Sound tick: HL -> a request-flag byte with bit 0, 1 or 2 set, B = the

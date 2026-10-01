@@ -251,6 +251,7 @@ OPT_CHS = OPT_BASE + 39
 OPT_WOB = OPT_BASE + 42
 OPT_BSEG = OPT_BASE + 45
 OPT_SILPASS = OPT_BASE + 48
+OPT_OUTLOOP = OPT_BASE + 51
 OPT_SCAN = []               # (alpha_advance's loop is unrolled now: object_scans_inc)
 OPT_ALPHA = OPT_BASE + 6
 
@@ -277,6 +278,11 @@ def sound_patches():
     put_bytes(0x5C0F, bytes([0xCD, OPT_CHOUT & 0xFF, OPT_CHOUT >> 8,      # call snd_chout
                              0x18, 0x5C54 - 0x5C14]),                   # jr $5C54
               "sound channel output -> snd_chout (unchanged channels skipped)")
+    # ... and the loop around it ($5BFA-$5C5C) native (snd_outloop).
+    assert ORIG[0x5BFA:0x5C0F].hex() == "fd4601fd23fd23fd7e00a720071 10a00fd1918f3c5".replace(" ", "")
+    assert ORIG[0x5C54:0x5C5D].hex() == "c1110a00fd1910a5c9"
+    put_bytes(0x5BFA, bytes([0xC3, OPT_OUTLOOP & 0xFF, OPT_OUTLOOP >> 8]),
+              "sound output loop -> snd_outloop (native)")
     # The sound tick runs from our NMI every vblank (src/sound.asm
     # snd_nmi_tick), not from the handler: music keeps time when the logic lags.
     assert ORIG[0x00D2:0x00D5] == bytes([0xCD, 0x90, 0x5A])

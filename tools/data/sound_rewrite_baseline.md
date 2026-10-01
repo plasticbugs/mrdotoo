@@ -28,7 +28,12 @@ body 1.7%, allocator $5E10 1.3%, channel output $5BB3 1.1%, stream reader $5C69
 
 ## Steps
 
-| step | what | audio A/B | monsters 7 | chomper 7 | ball 7 |
-|---|---|---|---|---|---|
-| 0 | baseline 9bc81d7 | - | 72.2% | 68.3% | 70.2% |
-| 1 | silencing pass $5ADD native (snd_silpass) | IDENTICAL | 75.4% | 71.1% | 71.8% |
+Engine cost (tools/sound_ab.sh prints it): T-states per tick in the harness,
+deterministic (the seeded play scenarios are chaotic: one seed swings +-1.5 points
+for any timing change, so they only show trends).
+
+| step | what | audio A/B | T/tick seed 1 | monsters 7 | chomper 7 | ball 7 |
+|---|---|---|---|---|---|---|
+| 0 | baseline 9bc81d7 | - | 13496 | 72.2% | 68.3% | 70.2% |
+| 1 | silencing pass $5ADD native (snd_silpass) | IDENTICAL | - | 75.4% | 71.1% | 71.8% |
+| 2 | output loop $5BFA native, snd_chout table-driven | IDENTICAL | 11615 | 74.0% | 71.2% | 72.8% |

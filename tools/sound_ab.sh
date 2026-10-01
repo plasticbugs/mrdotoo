@@ -8,7 +8,7 @@ MIX=${1:-40000}; rc=0
 run() {
   MRDO_SYM=$PWD/$2 SHOUT=$3 SEED=$4 MIX=$MIX \
     ${OPENMSX:-/Applications/openMSX.app/Contents/MacOS/openmsx} -machine ColecoVision_SGM \
-    -carta $1 -romtype ColecoMegaCart -command "set renderer none" -script tools/sound_harness.tcl > /dev/null 2>&1
+    -carta $1 -romtype ColecoMegaCart -command "set renderer none" -script tools/sound_harness.tcl 2>&1 | grep COST > $3.cost
 }
 for s in 1 2 3; do
   [ -f build/base/h$s.$MIX.txt ] || run build/base/mrdo.rom build/base/mrdo.sym build/base/h$s.$MIX.txt $s &
@@ -17,5 +17,6 @@ done
 wait
 for s in 1 2 3; do
   printf "seed %s: " $s; python3 tools/sound_cmp.py build/base/h$s.$MIX.txt build/sh_new$s.txt || rc=1
+  echo "  engine cost: base $(cut -d, -f2 build/base/h$s.$MIX.txt.cost)  new $(cut -d, -f2 build/sh_new$s.txt.cost)"
 done
 exit $rc
