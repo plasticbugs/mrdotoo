@@ -27,6 +27,8 @@ SCR_BANK0       equ 15          ; non-gameplay screens: sets, hashes, scene data
 SCR_INDEX       equ 16          ; bytes per scr_index entry
 SCR_EXTRA       equ 6           ; tools/gen_screens.py SCREENS order
 SCR_CONGRATS    equ 7
+WONDER_SIG      equ $2D7        ; tools/data/screens/wonderful.txt "sig 2d7 2d"
+WONDER_TILE     equ $2D
 N_SCREENS       equ (scr_index_end - scr_index) / SCR_INDEX
 MODE_NONE       equ 0
 MODE_PLAYFIELD  equ 1
@@ -447,7 +449,17 @@ flip_pnt:
 ; Which colourway is on screen? The arcade fills the playfield background with
 ; the level's dirt; its bottom-left corner cell ($83) identifies it.
 check_colourway:
-        ld a, (ARC_VRAM + $083)
+        ld a, (ARC_FG_TILE + WONDER_SIG)  ; WONDERFUL (after scene 10) keeps
+        cp WONDER_TILE          ; the last maze's dirt in cell $083: without
+        jr nz, .maze            ; this it stayed a playfield (apples and
+        xor a                   ; junk). Its signature wins; the colourway
+        ld (cw_valid), a        ; is forgotten so the next maze is found
+        dec a
+        ld (cw_attr), a
+        ld a, ARC_HI_BANK
+        call select_bank
+        jp check_screens
+.maze:  ld a, (ARC_VRAM + $083)
         ld b, a
         ld a, (ARC_VRAM + $483)
         ld c, a

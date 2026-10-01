@@ -53,7 +53,9 @@ FONT_TILES = range(0x30)        # 0-9, A-Z and punctuation
 # Order matters: the first signature match wins. The title's logo is on the
 # instruction screen too, and congrats (the CONGRATULATIONS opening the diamond
 # and EXTRA scenes share) stays on screen under both.
-SCREENS = ["instruction", "title", "verygood", "hiscore", "wonderful", "diamond", "extra", "congrats"]
+SCREENS = ["instruction", "title", "wonderful", "verygood", "hiscore", "diamond", "extra", "congrats"]
+# wonderful before verygood: WONDERFUL also shows VERY GOOD's signature ($2D at $2DA),
+# VERY GOOD never shows WONDERFUL's ($2D at $2D7: $29 there)
 # Screens shown as a romhack image instead (tools/gen_images.py): name -> bank
 # (src/image.asm IMG_BANK_EXTRA = MC_FIXED - 2)
 IMAGES = {"extra": 29}

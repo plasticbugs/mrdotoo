@@ -38,7 +38,7 @@ VGL_SPRS        equ 22              ; sprite patterns (20 + 2 icon overlays)
 VGL_COL         equ 5               ; = tools/gen_images.py VG_COL, VG_ROW
 VGL_ROW         equ 16
 VGL_CHUNK       equ 192             ; bytes uploaded per vblank (spaced)
-VG_SCR          equ 2               ; "verygood" in tools/gen_screens.py SCREENS
+VG_SCR          equ 3               ; "verygood" in tools/gen_screens.py SCREENS
 VGL_NONE        equ $80             ; vgl_x0: not placed yet
 
 ; Variables: the driver's area is full; these sit after SCN_LIST in the
