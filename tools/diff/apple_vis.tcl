@@ -38,7 +38,7 @@ expr {srand($::env(SEED))}
 set ::dirs {0xfe 0xfd 0xfb 0xf7 0xff}
 proc mv {} {
     set d [lindex $::dirs [expr {int(rand()*5)}]]
-    if {rand() < 0.15} { set d [expr {$d & 0xbf}] }
+    if {rand() < 0.15} { set d [expr {$d & 0xef}] }
     poke [symaddr inp_p1] $d; poke [symaddr inp_override] 1; after time [expr {0.3 + rand()*0.8}] mv
 }
 after time 6 mv
