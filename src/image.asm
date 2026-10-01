@@ -141,7 +141,14 @@ extra_check:
         ld a, (mode)
         cp MODE_IMAGE
         ret z
-        ld a, (ARC_WORK + $0C7)
+        cp MODE_SCREEN          ; VERY GOOD after an EXTRA round end (scene 3,
+        jr nz, .why             ; 6...) scrolls through 224 with $E0C7 still
+        ld a, (scr)             ; 4: only EXTRA's own opening may lead here
+        cp SCR_EXTRA
+        jr z, .why
+        cp SCR_CONGRATS
+        ret nz
+.why:   ld a, (ARC_WORK + $0C7)
         cp WHY_EXTRA
         ret nz
         ld a, (IO_SCROLL_Y)

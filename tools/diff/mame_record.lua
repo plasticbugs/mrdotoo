@@ -75,16 +75,16 @@ local function install()
   taps[5] = mem:install_read_tap(0xE001, 0xE001, "hstart", function(off, data, mask)
     if cpu.state["CURPC"].value == 0x00C4 then
       local it = tonumber(os.getenv("ITRACE") or "-1")
-      -- SCEN (vg|w|dia|ext) + POKEH=h: end the round into that scene at the
+      -- SCEN (vg|w|dia|ext|ext3) + POKEH=h: end the round into that scene at the
       -- start of handler h (tools/diff/cv_replay.tcl does the same)
       if os.getenv("HEAVY") and n > 0 and n % 600 == 0 then
         mem:write_u8(0xE0B2, mem:read_u8(0xE0B2) | 3)
       end
       if os.getenv("SCEN") and n == tonumber(os.getenv("POKEH") or "-1") then
         local sc = os.getenv("SCEN")
-        local lv = ({vg=0x03, w=0x10, dia=0x01, ext=0x01})[sc]
-        local why = ({vg=2, w=2, dia=3, ext=4})[sc]
-        local fl = ({vg=0x80, w=0x80, dia=0xA0, ext=0x88})[sc]
+        local lv = ({vg=0x03, w=0x10, dia=0x01, ext=0x01, ext3=0x03})[sc]
+        local why = ({vg=2, w=2, dia=3, ext=4, ext3=4})[sc]
+        local fl = ({vg=0x80, w=0x80, dia=0xA0, ext=0x88, ext3=0x88})[sc]
         mem:write_u8(0xE09B, lv); mem:write_u8(0xE0C7, why)
         mem:write_u8(0xE1B6, mem:read_u8(0xE1B6) | fl)
       end

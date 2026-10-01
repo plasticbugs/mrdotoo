@@ -47,14 +47,14 @@ set ::maxh $::env(FRAMES)
 set ::out [open $::env(OUTRAM) wb]
 fconfigure $::out -translation binary
 
-# SCEN (vg|w|dia|ext) + POKEH=h: end the round into that scene at the start
+# SCEN (vg|w|dia|ext|ext3) + POKEH=h: end the round into that scene at the start
 # of handler h, as tools/diff/mame_record.lua does
 proc scene_poke {} {
     if {![info exists ::env(SCEN)] || $::h != $::env(POKEH)} return
     set sc $::env(SCEN)
-    set lv [dict get {vg 3 w 16 dia 1 ext 1} $sc]
-    set why [dict get {vg 2 w 2 dia 3 ext 4} $sc]
-    set fl [dict get {vg 0x80 w 0x80 dia 0xA0 ext 0x88} $sc]
+    set lv [dict get {vg 3 w 16 dia 1 ext 1 ext3 3} $sc]
+    set why [dict get {vg 2 w 2 dia 3 ext 4 ext3 4} $sc]
+    set fl [dict get {vg 0x80 w 0x80 dia 0xA0 ext 0x88 ext3 0x88} $sc]
     poke 0x609B $lv; poke 0x60C7 $why; poke 0x61B6 [expr {[peek 0x61B6] | $fl}]
 }
 # HEAVY=1: level 5, Mr. Do invincible, letter monster + chompers forced every
