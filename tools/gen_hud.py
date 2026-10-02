@@ -67,9 +67,9 @@ LETTERS = [(12, 0x4E, 0x0E), (14, 0x52, 0x21), (15, 0x54, 0x1D),
 EX_ATTRS = [0x2D, 0x1A, 0x25]
 BOX_ROW, BOX_X0, BOX_X1 = 5, 0, 6    # frame rows 5-7, columns 0-6 of the panel
 # letter colours (user's pick, 2026-10-01, from artifacts/24-hud-extra):
-# not collected light blue, collected light yellow; the next letter keeps
+# not collected grey, collected light yellow; the next letter keeps
 # its own colour on the marker's dark blue
-UNLIT = 5                       # TMS light blue
+UNLIT = 14                      # TMS grey
 COLLECTED = 11                  # TMS light yellow
 MARK_BG = 4                     # TMS dark blue
 
