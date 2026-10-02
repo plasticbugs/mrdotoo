@@ -5,7 +5,10 @@ Every state of every letter as the CV draws it (patterns and colours read
 from build/tiles/hud.bin, codes from its glyph table), the whole box in
 typical game situations, and the arcade's own box in each state for
 reference. Labels use the arcade font.
-usage: hud_extra_sheet.py OUT.png   (after make)"""
+usage: hud_extra_sheet.py OUT.png   (after make)
+       hud_extra_sheet.py --combos OUT.png   every TMS colour for the letters
+       on black, every letter/background pair for the "next" marker, and
+       the box with alternatives for each state"""
 import subprocess
 import sys
 from pathlib import Path
@@ -144,7 +147,67 @@ SITUATIONS = [
 ]
 
 
+NAMES = ["", "BLACK", "MED GREEN", "LT GREEN", "DK BLUE", "LT BLUE", "DK RED", "CYAN",
+         "MED RED", "LT RED", "DK YELLOW", "LT YELLOW", "DK GREEN", "MAGENTA", "GREY", "WHITE"]
+CUR = {"NOT COLLECTED": (14, 1), "COLLECTED": (HUD.COLLECTED, 1), "NEXT": (15, 4),
+       "NEXT COLLECTED": (HUD.COLLECTED, 4)}
+
+
+def letter(i, fg, bg):
+    """Letter i of EXTRA as the HUD draws it, in TMS colours fg on bg."""
+    art = G.rot(fgt[HUD.LETTERS[i][2]])
+    return [[G.TMS[fg] if v else G.TMS[bg] for v in r] for r in art]
+
+
+def word(fg, bg):
+    return [sum((letter(i, fg, bg)[y] for i in range(5)), []) for y in range(8)]
+
+
+def combos(out):
+    TS, LS, MS = 3, 6, 6
+    pad, gap = 24, 10
+    lab_w = 25 * 8 * TS
+    cols = list(range(2, 16))
+    W = max(pad * 2 + lab_w + 40 * LS + 20, pad * 2 + 4 * 8 * TS + len(cols) * (8 * MS + gap) + 40)
+    H = pad + 2 * (8 * TS + 12) + len(cols) * (8 * LS + 8) + 40 + 8 * TS + 12 + 2 * 8 * TS + 8 \
+        + len(cols) * (8 * MS + gap) + pad
+    cv = Canvas(W, H)
+    cv.ts = TS
+    y = pad
+    cv.text(pad, y, "LETTERS ON BLACK   NOW MARKED")
+    y += 8 * TS + 12
+    for c in cols:
+        tag = "  NOW NOT COLL" if c == CUR["NOT COLLECTED"][0] else "  NOW COLL" if c == CUR["COLLECTED"][0] else ""
+        cv.text(pad, y + (8 * LS - 8 * TS) // 2, "%d %s%s" % (c, NAMES[c], tag))
+        cv.block(pad + lab_w, y, word(c, 1), LS)
+        y += 8 * LS + 8
+    y += 40
+    cv.text(pad, y, "NEXT MARKER  LETTER ACROSS  BG DOWN")
+    y += 8 * TS + 6
+    cv.text(pad, y, "WHITE FRAME  NOW")
+    y += 8 * TS + 12
+    x0 = pad + 4 * 8 * TS
+    for k, fg in enumerate(cols):
+        cv.text(x0 + k * (8 * MS + gap) + (8 * MS - (2 if fg > 9 else 1) * 8 * TS) // 2, y, str(fg))
+    y += 2 * 8 * TS + 8
+    for bg in cols:
+        cv.text(pad, y + (8 * MS - 8 * TS) // 2, str(bg))
+        for k, fg in enumerate(cols):
+            x = x0 + k * (8 * MS + gap)
+            if fg == bg:
+                continue
+            if (fg, bg) in (CUR["NEXT"], CUR["NEXT COLLECTED"]):
+                cv.block(x - 4, y - 4, [[WHITE] * (8 * MS + 8)] * (8 * MS + 8), 1)
+            cv.block(x, y, letter(0, fg, bg), MS)
+        y += 8 * MS + gap
+    cv.save(out)
+    print(out)
+
+
 def main():
+    if sys.argv[1:2] == ["--combos"]:
+        combos(Path(sys.argv[2] if len(sys.argv) > 2 else ROOT / "build" / "hud_extra_combos.png"))
+        return
     out = Path(sys.argv[1] if len(sys.argv) > 1 else ROOT / "build" / "hud_extra_sheet.png")
     GS, BS, ABS, TS = 10, 6, 4, 3          # glyph, box, arcade box, label scale
     pad = 24
