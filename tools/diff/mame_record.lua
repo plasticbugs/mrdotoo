@@ -18,6 +18,27 @@ local P1, P2
 -- system only updates once per frame, which can land mid-handler.
 local want_p1, want_p2 = 0xFF, 0xFF
 local cur_p1, cur_p2 = 0xFF, 0xFF
+-- REPLAY=file.inp (tools/play_record.sh): a person's play recorded on the
+-- validation build (tools/diff/cv_record.tcl) instead of the scripted play:
+-- per handler, input bytes for ports 0-3; reads in the coin poll ($01A6-
+-- $01F9) take effect at handler start, later ones at the sync point (the
+-- same split tools/diff/cv_replay.tcl applies the other way round).
+local replay = os.getenv("REPLAY")
+local rpre, rpost, rcur = {}, {}, {0xFF, 0xFF, 0xDF, 0xFF}
+if replay then
+  for line in io.lines(replay) do
+    local h, port, v, pc = line:match("^(%-?%d+) (%d+) (%d+) (%x+)$")
+    if h then
+      h = math.max(tonumber(h), 0); pc = tonumber(pc, 16)
+      local t = (pc >= 0x01A6 and pc < 0x01FA) and rpre or rpost
+      t[h] = t[h] or {}
+      table.insert(t[h], {tonumber(port), tonumber(v)})
+    end
+  end
+end
+local function rapply(t, h)
+  if t[h] then for _, pv in ipairs(t[h]) do rcur[pv[1] + 1] = pv[2] end end
+end
 local P1BIT = {["P1 Left"]=0, ["P1 Down"]=1, ["P1 Right"]=2, ["P1 Up"]=3,
                ["P1 Button 1"]=4, ["1 Player Start"]=5, ["2 Players Start"]=6}
 local function setf(port, name, v)
@@ -59,6 +80,7 @@ local function install()
   end
   taps[1] = mem:install_read_tap(0x0156, 0x0156, "snap", function(off, data, mask)
     if finished or cpu.state["CURPC"].value ~= 0x00E9 then return data end
+    if replay then rapply(rpost, n) end
     ram:write(mem:read_range(0xE000, 0xEFFF, 8)); ram:write(mem:read_range(0x8000, 0x8FFF, 8))
     n = n + 1
     -- optional: SNAP=h1,h2,... saves a screenshot at those handlers
@@ -90,6 +112,7 @@ local function install()
       end
 
       cur_p1, cur_p2 = want_p1, want_p2
+      if replay then rapply(rpre, n) end
     end
     return data
   end)
@@ -126,8 +149,12 @@ end
 
 function inp_tap(off, data, mask)
   local pc = cpu.state["CURPC"].value
-  if off == 0xA000 then data = (data & 0xFF00) | cur_p1 end
-  if off == 0xA001 then data = (data & 0xFF00) | cur_p2 end
+  if replay then
+    data = (data & 0xFF00) | rcur[off - 0xA000 + 1]
+  else
+    if off == 0xA000 then data = (data & 0xFF00) | cur_p1 end
+    if off == 0xA001 then data = (data & 0xFF00) | cur_p2 end
+  end
   -- reads before the sync point (coin poll, $01A6-$01F9) belong to the handler
   -- about to be snapshotted; later reads belong to the last snapshotted one
   local h = (pc >= 0x01A6 and pc < 0x01FA) and n or n - 1
@@ -161,6 +188,7 @@ emu.register_frame_done(function()
     return
   end
   if finished == nil then return end
+  if replay then return end
   if not os.getenv("NOCOIN") then   -- NOCOIN: leave the attract sequence running
     if f == 600 then setf(P2, "Coin 1", 1) elseif f == 606 then setf(P2, "Coin 1", 0) end
   end

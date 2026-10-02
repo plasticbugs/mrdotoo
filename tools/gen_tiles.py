@@ -127,6 +127,7 @@ def screen2_pixels(pat, col):
 CHERRY_RED = 8                  # TMS medium red: the cherries
 CHERRY_QUAD = {(0, 0): 0x79, (1, 0): 0x7B, (0, 1): 0x78, (1, 1): 0x7A}   # player view -> fg tile
 CHERRIES_JSON = HERE_DATA = Path(__file__).resolve().parent / "data" / "cherries.json"
+APPLES_JSON = Path(__file__).resolve().parent / "data" / "apples.json"
 
 
 def _dist(a, b):
@@ -217,6 +218,36 @@ def cherry_dug(dirt_pair, design):
                         w.append(5)
                 rows.append(_reduce_row(cols, w))
             out[t] = rows
+    return out
+
+
+def apple_design(dirt_pair, dirt_px):
+    """16x16 TMS colours (player view) of a resting apple over this level's
+    dirt (dirt_px: the dirt cell as drawn): the Apple Lab's saved design
+    (tools/data/apples.json, key 'aa/tt') if any, else the best guess: the
+    sprite's apple whole (its shape and colour, so the handover to the
+    wobbling sprite shows no change), and in each 8-pixel half-row that the
+    apple touches the dirt keeps its most common colour there (2 colours a
+    row: Screen 2). Before the lab, the sprite's pixels were simply laid over
+    the dirt and the 2-colour reduction ate apple pixels where the dirt
+    pattern had 2 colours."""
+    key = "%02x/%02x" % dirt_pair
+    if APPLES_JSON.exists():
+        saved = json.loads(APPLES_JSON.read_text()).get(key)
+        if saved:
+            return [saved[y * 16:y * 16 + 16] for y in range(16)]
+    out = [[0] * 16 for _ in range(16)]
+    for y in range(16):
+        for h in (0, 8):
+            xs = range(h, h + 8)
+            under = [dirt_px[y % 8][x % 8] for x in xs if not apple_mask[y][x]]
+            touched = len(under) < 8
+            keep = max(set(under), key=lambda c: (under.count(c), -c)) if under else None
+            for x in xs:
+                if apple_mask[y][x]:
+                    out[y][x] = APPLE_COLOUR
+                else:
+                    out[y][x] = keep if touched else dirt_px[y % 8][x % 8]
     return out
 
 
@@ -346,10 +377,10 @@ def main():
         # over this colourway's dirt tile, so the handover to and from the
         # sprite shows no change. Order TL, TR, BL, BR.
         dirt_px = screen2_pixels(*compose(dirt_pair, DIRT_FG, 0))   # (as drawn: TBLA[$77])
+        design = apple_design(dirt_pair, dirt_px)                     # (the Apple Lab's)
         for qy in (0, 1):
             for qx in (0, 1):
-                cell = [[APPLE_COLOUR if apple_mask[qy * 8 + y][qx * 8 + x] else dirt_px[y][x]
-                         for x in range(8)] for y in range(8)]
+                cell = [[design[qy * 8 + y][qx * 8 + x] for x in range(8)] for y in range(8)]
                 p_, c_ = to_screen2(cell)
                 pats.append(p_)
                 cols.append(c_)
