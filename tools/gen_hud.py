@@ -14,7 +14,7 @@ like the MSX2 port's:
                              tiles (col 29 rows 12/14/15/17/18): $2D unlit,
                              $1A collected (light yellow), $25 out (black); the next letter (the
                              arcade's letter-monster sprite on the box) in its
-                             own colour on light blue
+                             own colour on magenta
     row 17  SCENE..n         col 2 rows 17-21, 24, 25, 26
     row 19  TOP              col 1 rows 17-19
     row 20  top score        col 1 rows 21-26
@@ -67,11 +67,11 @@ LETTERS = [(12, 0x4E, 0x0E), (14, 0x52, 0x21), (15, 0x54, 0x1D),
 EX_ATTRS = [0x2D, 0x1A, 0x25]
 BOX_ROW, BOX_X0, BOX_X1 = 5, 0, 6    # frame rows 5-7, columns 0-6 of the panel
 # letter colours (user's pick, 2026-10-01, from artifacts/24-hud-extra):
-# not collected dark blue, collected light yellow; the next letter keeps
-# its own colour on the marker's light blue
-UNLIT = 4                       # TMS dark blue
+# not collected light blue, collected light yellow; the next letter keeps
+# its own colour on the marker's magenta
+UNLIT = 5                       # TMS light blue
 COLLECTED = 11                  # TMS light yellow
-MARK_BG = 5                     # TMS light blue
+MARK_BG = 13                    # TMS magenta (the nearest to purple)
 
 
 def gcode(i):
@@ -127,7 +127,7 @@ def main():
 
     # The next letter: the arcade marks it with a letter-monster sprite on
     # the box (off our playfield); src/hud.asm finds that sprite and draws
-    # the letter with one of these instead: its own colour on light blue.
+    # the letter with one of these instead: its own colour on magenta.
     marks = gcode(len(glyphs))
     for row, box, font in LETTERS:          # not collected yet
         art = fg_pixels(0x09, font)
