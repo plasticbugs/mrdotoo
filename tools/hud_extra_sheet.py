@@ -8,7 +8,10 @@ reference. Labels use the arcade font.
 usage: hud_extra_sheet.py OUT.png   (after make)
        hud_extra_sheet.py --combos OUT.png   every TMS colour for the letters
        on black, every letter/background pair for the "next" marker, and
-       the box with alternatives for each state"""
+       the box with alternatives for each state
+       hud_extra_sheet.py --markers OUT.png   the current letter colours with
+       every marker background, the marker on a letter not collected and on
+       a collected one"""
 import subprocess
 import sys
 from pathlib import Path
@@ -204,7 +207,55 @@ def combos(out):
     print(out)
 
 
+def box_custom(cells):
+    """The box with explicit letter cells (8x8 RGB each)."""
+    st = hud[0xB80:0xBC0]
+    static = {st[k]: st[k + 1] for k in range(0, len(st), 2) if st[k] != 0xFF}
+    rows = []
+    for r in range(HUD.BOX_ROW, HUD.BOX_ROW + 3):
+        line = []
+        for x in range(HUD.BOX_X0, HUD.BOX_X1 + 1):
+            if r == HUD.BOX_ROW + 1 and HUD.BOX_X0 < x < HUD.BOX_X1:
+                line.append(cells[x - HUD.BOX_X0 - 1])
+            else:
+                line.append(glyph(static.get(r * 8 + x, HUD.HUD_BASE)))
+        for y in range(8):
+            rows.append([p for c in line for p in c[y]])
+    return rows
+
+
+def markers(out):
+    TS, BS, pad = 3, 5, 24
+    U, C = HUD.UNLIT, HUD.COLLECTED
+    lab_w = 17 * 8 * TS
+    bw, bh = 7 * 8 * BS, 3 * 8 * BS
+    cols = list(range(2, 16))
+    W = pad * 4 + lab_w + bw + 40 + max(bw, 16 * 8 * TS)
+    H = pad + 3 * (8 * TS + 10) + len(cols) * (bh + 14) + pad
+    cv = Canvas(W, H)
+    cv.ts = TS
+    y = pad
+    cv.text(pad, y, "MARKER COLOUR  LETTERS %s %s" % (NAMES[U], NAMES[C]))
+    y += 8 * TS + 10
+    cv.text(pad + lab_w + pad, y, "ON UNCOLL X")
+    cv.text(pad + lab_w + pad + bw + 40, y, "ON COLLECTED E")
+    y += 2 * (8 * TS + 10)
+    for bg in cols:
+        tag = "  NOW" if bg == HUD.MARK_BG else ""
+        cv.text(pad, y + (bh - 8 * TS) // 2, "%d %s%s" % (bg, NAMES[bg], tag))
+        a = [letter(0, C, 1), letter(1, U, bg), letter(2, C, 1), letter(3, U, 1), letter(4, U, 1)]
+        b = [letter(0, C, bg), letter(1, U, 1), letter(2, C, 1), letter(3, U, 1), letter(4, U, 1)]
+        cv.block(pad + lab_w + pad, y, box_custom(a), BS)
+        cv.block(pad + lab_w + pad + bw + 40, y, box_custom(b), BS)
+        y += bh + 14
+    cv.save(out)
+    print(out)
+
+
 def main():
+    if sys.argv[1:2] == ["--markers"]:
+        markers(Path(sys.argv[2] if len(sys.argv) > 2 else ROOT / "build" / "hud_extra_markers.png"))
+        return
     if sys.argv[1:2] == ["--combos"]:
         combos(Path(sys.argv[2] if len(sys.argv) > 2 else ROOT / "build" / "hud_extra_combos.png"))
         return
