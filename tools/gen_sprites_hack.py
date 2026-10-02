@@ -372,6 +372,22 @@ MAP = [
 # the wobble frames are the resting apple tilted: shift the hack apple from
 # the resting position by the arcade centroid change (+-1 px), so it jiggles
 WOBBLE_REF = 0x5E
+# the resting apple's shape is the user's drawing (Apple Lab, the chomper-red
+# design: its colour-8 pixels, user 2026-10-01), at the exact place it was
+# drawn (the lab grid is the sprite's 16x16), so the tiles 172-175
+# (tools/gen_tiles.py) and the sprite are the same apple; the wobble frames
+# shift it as before
+APPLE_SHAPE_PAIR, APPLE_SHAPE_COL = "28/0c", 8
+
+
+def user_apple():
+    f = Path(__file__).resolve().parent / "data" / "apples.json"
+    if not f.exists():
+        return None
+    import json
+    px = json.loads(f.read_text()).get(APPLE_SHAPE_PAIR)
+    return [[1 if px[y * 16 + x] == APPLE_SHAPE_COL else 0 for x in range(16)]
+            for y in range(16)] if px else None
 
 # desserts: food index -> hack 2x2 tile block (col, row) in tilesetscr2
 # (arcade food = NestWork[level]: sprite $3D+food over plate tiles food*4+k)
@@ -574,6 +590,10 @@ def main():
     layers = {}          # key -> (main grid, overlay grid)
 
     group_xf = {}
+    uapple = user_apple()
+    if uapple:
+        hs = dict(hs)
+        hs[APPLE] = uapple
     for group, codes, cands, xfs, rule in MAP:
         if isinstance(xfs, str):        # "same:<group>": that group's facing
             xfs = [group_xf[xfs[5:]]]
@@ -594,6 +614,9 @@ def main():
         group_xf[group] = xf
         for code in codes:
             s, lbl, h, sh = picks[code]
+            if group == "apple" and uapple:
+                h, sh = uapple, (0, 0)
+                s = iou(h, masks[code * 4])
             if group == "apple wobble":
                 ref = chosen[WOBBLE_REF][2]
                 d = round(centroid(masks[code * 4])[0] - centroid(masks[WOBBLE_REF * 4])[0])

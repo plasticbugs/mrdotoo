@@ -16,7 +16,7 @@ build/tiles/sets.bin: tools/gen_tiles.py build/sprites/pat.bin $(wildcard tools/
 build/tiles/hud.bin: tools/gen_hud.py tools/gen_tiles.py
 	python3 tools/gen_hud.py
 
-build/sprites/pat.bin build/sprites/pin.bin: tools/gen_sprites.py tools/gen_sprites_hack.py
+build/sprites/pat.bin build/sprites/pin.bin: tools/gen_sprites.py tools/gen_sprites_hack.py $(wildcard tools/data/apples.json)
 	python3 tools/gen_sprites.py
 	python3 tools/gen_sprites_hack.py
 
