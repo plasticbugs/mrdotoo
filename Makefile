@@ -10,7 +10,7 @@ all: $(ROM)
 build/font.bin: tools/gen_font.py
 	python3 tools/gen_font.py > /dev/null
 
-build/tiles/sets.bin: tools/gen_tiles.py build/sprites/pat.bin
+build/tiles/sets.bin: tools/gen_tiles.py build/sprites/pat.bin $(wildcard tools/data/cherries.json tools/data/apples.json)
 	python3 tools/gen_tiles.py
 
 build/tiles/hud.bin: tools/gen_hud.py tools/gen_tiles.py
