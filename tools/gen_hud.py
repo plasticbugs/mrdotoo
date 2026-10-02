@@ -12,9 +12,9 @@ like the MSX2 port's:
     rows 5-7 EXTRA box       a drawn frame; one letter per EXTRA letter, its
                              state from the fg attribute of one of its box
                              tiles (col 29 rows 12/14/15/17/18): $2D unlit,
-                             $1A collected (light green), $25 out (black); the next letter (the
-                             arcade's letter-monster sprite on the box) white
-                             (green if collected) on blue
+                             $1A collected (light yellow), $25 out (black); the next letter (the
+                             arcade's letter-monster sprite on the box) in its
+                             own colour on dark blue
     row 17  SCENE..n         col 2 rows 17-21, 24, 25, 26
     row 19  TOP              col 1 rows 17-19
     row 20  top score        col 1 rows 21-26
@@ -66,8 +66,12 @@ LETTERS = [(12, 0x4E, 0x0E), (14, 0x52, 0x21), (15, 0x54, 0x1D),
            (17, 0x58, 0x1B), (18, 0x5A, 0x0A)]       # (row, box tile, font tile)
 EX_ATTRS = [0x2D, 0x1A, 0x25]
 BOX_ROW, BOX_X0, BOX_X1 = 5, 0, 6    # frame rows 5-7, columns 0-6 of the panel
-COLLECTED = 3                   # TMS light green: collected letters (user's pick, 2026-09-28;
-                                # the arcade's yellow was too close to the grey and the frame)
+# letter colours (user's pick, 2026-10-01, from artifacts/24-hud-extra):
+# not collected light blue, collected light yellow; the next letter keeps
+# its own colour on the marker's dark blue
+UNLIT = 5                       # TMS light blue
+COLLECTED = 11                  # TMS light yellow
+MARK_BG = 4                     # TMS dark blue
 
 
 def gcode(i):
@@ -103,10 +107,10 @@ def main():
 
     # EXTRA letters: box tiles draw the frame with pen 1 (yellow) and the
     # letter with pen 2: grey ($2D, not yet collected), yellow ($1A,
-    # collected) or black ($25: its letter monster is out). The arcade's grey
-    # (88,88,88) is nearest to TMS black, so the grey is TMS grey 14.
+    # collected) or black ($25: its letter monster is out). Here UNLIT and
+    # COLLECTED (the arcade's grey is nearest to TMS black).
     frame_col = G.tms_index(pal[(0x2D & 0x3F) * 4 + 1])
-    letter_col = {0x2D: (14, 1), 0x1A: (COLLECTED, 1), 0x25: (1, 1)}
+    letter_col = {0x2D: (UNLIT, 1), 0x1A: (COLLECTED, 1), 0x25: (1, 1)}
     lit0 = None
     for row, box, font in LETTERS:
         for a in EX_ATTRS:
@@ -123,15 +127,15 @@ def main():
 
     # The next letter: the arcade marks it with a letter-monster sprite on
     # the box (off our playfield); src/hud.asm finds that sprite and draws
-    # the letter with one of these instead: white on the monster's blue.
+    # the letter with one of these instead: its own colour on dark blue.
     marks = gcode(len(glyphs))
-    for row, box, font in LETTERS:          # not collected yet: white on blue
+    for row, box, font in LETTERS:          # not collected yet
         art = fg_pixels(0x09, font)
-        glyphs.append(G.to_screen2([[15 if c != 1 else 4 for c in r] for r in art]))
+        glyphs.append(G.to_screen2([[UNLIT if c != 1 else MARK_BG for c in r] for r in art]))
     marks2 = gcode(len(glyphs))
-    for row, box, font in LETTERS:          # collected: its colour on blue
+    for row, box, font in LETTERS:          # collected
         art = fg_pixels(0x09, font)
-        glyphs.append(G.to_screen2([[COLLECTED if c != 1 else 4 for c in r] for r in art]))
+        glyphs.append(G.to_screen2([[COLLECTED if c != 1 else MARK_BG for c in r] for r in art]))
 
     # frame: lines 2 px thick, placed to hug the letter row
     def frame_tile(top=False, bottom=False, left=False, right=False):
