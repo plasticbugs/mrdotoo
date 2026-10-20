@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mr. Do! Cartridge Builder</title>
+<style>
+:root {
+  --bg: #f6f3ec; --card: #ffffff; --ink: #1f1d1a; --soft: #5f5a52; --line: #ddd6c8;
+  --accent: #c8321e; --accent-ink: #ffffff; --ok: #1d7a3a; --bad: #b3261e; --drop: #fbf8f2;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171614; --card: #22201d; --ink: #f1ede5; --soft: #b3ac9f; --line: #3a3631;
+    --accent: #e0533c; --accent-ink: #ffffff; --ok: #5cc17b; --bad: #f07b6f; --drop: #1c1b18;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #171614; --card: #22201d; --ink: #f1ede5; --soft: #b3ac9f; --line: #3a3631;
+  --accent: #e0533c; --accent-ink: #ffffff; --ok: #5cc17b; --bad: #f07b6f; --drop: #1c1b18;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+main { max-width: 620px; margin: 0 auto; padding: 32px 16px 48px; }
+h1 { font-size: 28px; line-height: 1.2; margin: 0 0 6px; }
+.sub { color: var(--soft); margin: 0 0 28px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px; margin-bottom: 16px; }
+.step { display: flex; gap: 14px; }
+.num {
+  flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
+  display: grid; place-items: center; font-weight: 700; font-size: 15px; margin-top: 1px;
+}
+.step h2 { font-size: 19px; margin: 0 0 4px; }
+.step p { margin: 0 0 12px; color: var(--soft); }
+.drop {
+  border: 2px dashed var(--line); border-radius: 12px; background: var(--drop);
+  padding: 22px 16px; text-align: center; transition: border-color .15s, background .15s;
+}
+.drop.over { border-color: var(--accent); }
+.drop p { margin: 10px 0 0; color: var(--soft); font-size: 15px; }
+button {
+  font: inherit; font-weight: 650; border: 0; border-radius: 10px; padding: 12px 22px; cursor: pointer;
+  background: var(--accent); color: var(--accent-ink);
+}
+button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+button[disabled] { opacity: .45; cursor: default; }
+#status { min-height: 26px; margin: 0 0 12px; }
+#status.ok { color: var(--ok); font-weight: 600; }
+#status.bad { color: var(--bad); font-weight: 600; }
+#detail { color: var(--soft); font-size: 15px; margin: 0 0 12px; white-space: pre-line; }
+#detail:empty { display: none; }
+ul { margin: 0; padding-left: 20px; color: var(--soft); }
+li { margin: 4px 0; }
+.foot { color: var(--soft); font-size: 14px; margin-top: 20px; }
+code { font-size: 15px; }
+.foot code { font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Mr. Do! for ColecoVision</h1>
+  <p class="sub">Make the cartridge file from your own copy of the Mr. Do! arcade game. Nothing leaves your
+    computer: this page works offline and uploads nothing.</p>
+
+  <div class="card step">
+    <div class="num">1</div>
+    <div style="flex:1">
+      <h2>Choose your Mr. Do! arcade file</h2>
+      <p>The file named <b>mrdo.zip</b>, the Mr. Do! arcade game as used by the MAME emulator.
+        You can also choose the separate files from inside it.</p>
+      <div class="drop" id="drop">
+        <button id="pick" type="button">Choose mrdo.zip&hellip;</button>
+        <p>or drag it onto this box</p>
+        <input id="file" type="file" multiple hidden>
+      </div>
+    </div>
+  </div>
+
+  <div class="card step">
+    <div class="num">2</div>
+    <div style="flex:1">
+      <h2>Save your cartridge file</h2>
+      <p id="status">Waiting for your file&hellip;</p>
+      <p id="detail"></p>
+      <button id="save" type="button" disabled>Save mrdo_cv.rom</button>
+    </div>
+  </div>
+
+  <div class="card step">
+    <div class="num">3</div>
+    <div style="flex:1">
+      <h2>Play</h2>
+      <ul>
+        <li><b>On a ColecoVision:</b> copy <code>mrdo_cv.rom</code> to your flash cartridge like any other game.
+          The Super Game Module must be plugged in.</li>
+        <li><b>In the openMSX emulator:</b> choose the machine <i>ColecoVision with SGM</i> and insert
+          <code>mrdo_cv.rom</code> as a cartridge.</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="foot">Build @@VERSION@@. The finished file's SHA-1 is <code style="word-break:break-all">@@SHA1@@</code>.
+    Mr. Do! &copy; 1982 Universal. This is an unofficial fan project and contains no arcade ROM data.</p>
+</main>
+<script>
+// ==== core (tools/make_patch.py tests this part in node) ====
+const PATCH_B64 = "@@PATCH@@";
+// the four program ROMs of MAME's mrdo set, joined in this order: [name, CRC32]
+const NEED = [["a4-01.bin", 0x03DCFBA2], ["c4-02.bin", 0x0ECDD39C], ["e4-03.bin", 0x358F5DC2], ["f4-04.bin", 0xF4190CFC]];
+const SIZE = 8192;
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(b) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 255] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function patchBytes() {
+  const s = atob(PATCH_B64), b = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+  return b;
+}
+
+async function inflateRaw(data) {
+  const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+// The 8 KB members of a zip as [{crc, get()}], or null if b is not a zip.
+function zipMembers(b) {
+  const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  let end = -1;
+  for (let i = b.length - 22; i >= Math.max(0, b.length - 65557); i--)
+    if (v.getUint32(i, true) === 0x06054B50) { end = i; break; }
+  if (end < 0) return null;
+  let n = v.getUint16(end + 10, true), p = v.getUint32(end + 16, true);
+  const out = [];
+  while (n-- > 0 && p + 46 <= b.length && v.getUint32(p, true) === 0x02014B50) {
+    const method = v.getUint16(p + 10, true), crc = v.getUint32(p + 16, true);
+    const csize = v.getUint32(p + 20, true), usize = v.getUint32(p + 24, true), at = v.getUint32(p + 42, true);
+    if (usize === SIZE) out.push({crc, get: async () => {
+      const start = at + 30 + v.getUint16(at + 26, true) + v.getUint16(at + 28, true);
+      const raw = b.subarray(start, start + csize);
+      return method === 0 ? raw : method === 8 ? inflateRaw(raw) : null;
+    }});
+    p += 46 + v.getUint16(p + 28, true) + v.getUint16(p + 30, true) + v.getUint16(p + 32, true);
+  }
+  return out;
+}
+
+// files: [{name, bytes}] -> {source (the joined program ROMs) or null, missing, archive}
+async function findSource(files) {
+  const found = new Map();
+  const want = new Set(NEED.map(([, c]) => c));
+  let archive = null;
+  for (const {name, bytes: b} of files) {
+    if (b.length === SIZE) { const c = crc32(b); if (want.has(c)) found.set(c, b); continue; }
+    if (b[0] === 0x37 && b[1] === 0x7A && b[2] === 0xBC && b[3] === 0xAF) { archive = archive || "7z"; continue; }
+    if (b[0] === 0x52 && b[1] === 0x61 && b[2] === 0x72 && b[3] === 0x21) { archive = archive || "rar"; continue; }
+    const members = zipMembers(b);
+    if (!members) continue;
+    archive = archive || "zip";
+    for (const m of members) {
+      if (!want.has(m.crc) || found.has(m.crc)) continue;
+      const d = await m.get();
+      if (d && d.length === SIZE && crc32(d) === m.crc) found.set(m.crc, d);
+    }
+  }
+  const missing = NEED.filter(([, c]) => !found.has(c)).map(([n]) => n);
+  let source = null;
+  if (!missing.length) {
+    source = new Uint8Array(SIZE * NEED.length);
+    NEED.forEach(([, c], i) => source.set(found.get(c), i * SIZE));
+  }
+  return {source, missing, archive};
+}
+
+// BPS (byuu's format) -> {rom, meta}; throws with a plain-language message
+function applyBps(patch, source) {
+  const u32 = at => (patch[at] | patch[at + 1] << 8 | patch[at + 2] << 16 | patch[at + 3] << 24) >>> 0;
+  const end = patch.length - 12;
+  if (String.fromCharCode(...patch.subarray(0, 4)) !== "BPS1" || crc32(patch.subarray(0, patch.length - 4)) !== u32(patch.length - 4))
+    throw new Error("This page is damaged. Download it again.");
+  let pos = 4;
+  const num = () => {
+    let data = 0, shift = 1;
+    for (;;) {
+      const x = patch[pos++];
+      data += (x & 0x7F) * shift;
+      if (x & 0x80) return data;
+      shift *= 128;
+      data += shift;
+    }
+  };
+  const srcSize = num(), tgtSize = num(), metaSize = num();
+  const meta = new TextDecoder().decode(patch.subarray(pos, pos + metaSize));
+  pos += metaSize;
+  if (srcSize !== source.length || crc32(source) !== u32(end))
+    throw new Error("Your files are not the right version of Mr. Do!.");
+  const out = new Uint8Array(tgtSize);
+  let o = 0, srcRel = 0, tgtRel = 0;
+  while (pos < end) {
+    const data = num(), cmd = data % 4;
+    let len = Math.floor(data / 4) + 1;
+    if (cmd === 0) { out.set(source.subarray(o, o + len), o); o += len; }
+    else if (cmd === 1) { out.set(patch.subarray(pos, pos + len), o); pos += len; o += len; }
+    else {
+      const off = num(), d = off & 1 ? -Math.floor(off / 2) : Math.floor(off / 2);
+      if (cmd === 2) { srcRel += d; out.set(source.subarray(srcRel, srcRel + len), o); srcRel += len; o += len; }
+      else { tgtRel += d; while (len--) out[o++] = out[tgtRel++]; }
+    }
+  }
+  if (o !== tgtSize || crc32(out) !== u32(end + 4))
+    throw new Error("Something went wrong while building the file. Please try again.");
+  return {rom: out, meta};
+}
+// ==== page ====
+const $ = id => document.getElementById(id);
+let romUrl = null;
+
+function say(text, kind, detail) {
+  $("status").textContent = text;
+  $("status").className = kind || "";
+  $("detail").textContent = detail || "";
+}
+
+async function build(fileList) {
+  const files = [...fileList].filter(f => f.size <= 64 << 20);
+  if (!files.length) return;
+  $("save").disabled = true;
+  if (romUrl) { URL.revokeObjectURL(romUrl); romUrl = null; }
+  if (typeof DecompressionStream === "undefined") {
+    say("Your web browser is too old for this page.", "bad",
+        "Use a current version of Chrome, Edge, Firefox or Safari.");
+    return;
+  }
+  say("Checking your file…");
+  try {
+    const read = await Promise.all(files.map(async f => ({name: f.name, bytes: new Uint8Array(await f.arrayBuffer())})));
+    const {source, missing, archive} = await findSource(read);
+    if (!source) {
+      if (archive === "7z" || archive === "rar")
+        say("This file is packed in a format the page can’t open.", "bad",
+            "Unpack it first (on Windows with 7-Zip, on a Mac by double-clicking it), then choose the files that come out of it.");
+      else
+        say("This isn’t the right Mr. Do! file.", "bad",
+            "It must be the arcade game’s MAME set named mrdo (made by Universal), not a variant such as mrdot, mrdofix or mrlo, and not a ColecoVision or Atari version.\n" +
+            "Missing: " + missing.join(", "));
+      return;
+    }
+    const {rom} = applyBps(patchBytes(), source);
+    romUrl = URL.createObjectURL(new Blob([rom], {type: "application/octet-stream"}));
+    say("Your cartridge file is ready.", "ok", "Click the button to save it.");
+    $("save").disabled = false;
+    $("save").focus();
+  } catch (e) {
+    say(e.message || "Something went wrong. Please try again.", "bad");
+  }
+}
+
+$("pick").onclick = () => $("file").click();
+$("file").onchange = e => build(e.target.files);
+$("save").onclick = () => {
+  if (!romUrl) return;
+  const a = document.createElement("a");
+  a.href = romUrl; a.download = "mrdo_cv.rom";
+  document.body.appendChild(a); a.click(); a.remove();
+};
+const drop = $("drop");
+["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => build(e.dataTransfer.files));
+// a file dropped anywhere else would make the browser leave the page
+["dragover", "drop"].forEach(t => window.addEventListener(t, e => e.preventDefault()));
+</script>
+</body>
+</html>

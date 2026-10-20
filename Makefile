@@ -50,8 +50,8 @@ run: $(ROM)
 test: $(ROM)
 	tools/test_boot.sh
 
-# the release patch: build/release/mrdo_cv.bps + mrdo2cv.py (MAME's mrdo set -> this ROM)
-release: $(ROM) tools/make_patch.py tools/mrdo2cv.py
+# the release: build/release/mrdo_cv.bps + mrdo2cv.py + mrdo-cv-builder.html (MAME's mrdo set -> this ROM)
+release: $(ROM) tools/make_patch.py tools/mrdo2cv.py tools/builder.html tools/test_builder.mjs
 	python3 tools/make_patch.py
 
 clean:

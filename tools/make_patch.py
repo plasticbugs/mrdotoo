@@ -1,23 +1,26 @@
 #!/usr/bin/env python3
 """Make the release patch: build/release/mrdo_cv.bps turns MAME's mrdo set
 into build/mrdo.rom; build/release/ also gets tools/mrdo2cv.py, which
-applies it.
+applies it, and mrdo-cv-builder.html (tools/builder.html with the patch
+inside: the same in a web browser, offline, for people without Python).
 
 The patch is BPS (byuu's format). Its source is the romset files
 mrdo2cv.SOURCE names, joined in that order. Every run of the ROM found in the
 source (or earlier in the ROM itself) is encoded as a copy, so the arcade's
 program comes from the user's set; only the rest is stored in the patch.
-Afterwards mrdo2cv.py rebuilds the ROM from $DO_DISASM's files and the
-result must be byte-identical.
+Afterwards mrdo2cv.py rebuilds the ROM from $DO_DISASM's files, and the
+page's code (in node, from a zip of them) too; both must be byte-identical.
 
 usage: tools/make_patch.py [ROM]   (default build/mrdo.rom)
 """
+import base64
 import bisect
 import hashlib
 import os
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -150,7 +153,27 @@ def main():
     back, _ = mrdo2cv.bps_apply(patch, src)
     if back != rom:
         sys.exit("make_patch: the patch does not rebuild the ROM")
-    print("round trip OK, SHA-1 %s" % hashlib.sha1(back).hexdigest())
+    sha1 = hashlib.sha1(back).hexdigest()
+    print("round trip OK, SHA-1 %s" % sha1)
+    page = (ROOT / "tools" / "builder.html").read_text()
+    for key, val in (("@@PATCH@@", base64.b64encode(patch).decode()), ("@@VERSION@@", rev), ("@@SHA1@@", sha1)):
+        page = page.replace(key, val)
+    (OUT / "mrdo-cv-builder.html").write_text(page)
+    # the page's code, run in node on a MAME-style zip of the set
+    test = ROOT / "build" / "release_test"
+    test.mkdir(exist_ok=True)
+    with zipfile.ZipFile(test / "mrdo.zip", "w", zipfile.ZIP_DEFLATED) as z:
+        for f in sorted(DIS.glob("*.bin")):
+            if f.name != "mrdo_main.bin":
+                z.write(f, f.name)
+    if shutil.which("node") is None:
+        print("node not found: the builder page was NOT tested")
+        return
+    subprocess.run(["node", str(ROOT / "tools" / "test_builder.mjs"), str(OUT / "mrdo-cv-builder.html"),
+                    str(test / "page.rom"), str(test / "mrdo.zip")], check=True)
+    if (test / "page.rom").read_bytes() != rom:
+        sys.exit("make_patch: the builder page does not rebuild the ROM")
+    print("builder page OK (mrdo-cv-builder.html, %d bytes)" % len(page))
 
 
 if __name__ == "__main__":
