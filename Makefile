@@ -50,10 +50,14 @@ run: $(ROM)
 test: $(ROM)
 	tools/test_boot.sh
 
+# the release patch: build/release/mrdo_cv.bps + mrdo2cv.py (MAME's mrdo set -> this ROM)
+release: $(ROM) tools/make_patch.py tools/mrdo2cv.py
+	python3 tools/make_patch.py
+
 clean:
 	rm -rf build
 
-.PHONY: all run test validate clean
+.PHONY: all run test validate release clean
 
 build/images/extra.bin: tools/gen_images.py
 	python3 tools/gen_images.py
