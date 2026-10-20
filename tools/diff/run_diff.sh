@@ -14,8 +14,8 @@ if [ ! -d "$ROMPATH/mrdo" ]; then
   head -c 260 /dev/zero > "$ROMPATH/mrdo/u001_pal16r6cn.j2"   # stand-in for the missing PAL dump
 fi
 echo "recording $FRAMES handlers in MAME (seed $SEED)..."
-OUT=$OUT/ref FRAMES=$FRAMES SEED=$SEED SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy mame mrdo -rompath "$ROMPATH" -video none -sound none \
-  -nothrottle -skip_gameinfo -autoboot_script tools/diff/mame_record.lua > $OUT/mame.log 2>&1 || true
+OUT=$OUT/ref FRAMES=$FRAMES SEED=$SEED ROMPATH="$ROMPATH" tools/mame.sh \
+  -seconds_to_run $((FRAMES / 50 + 120)) -autoboot_script tools/diff/mame_record.lua > $OUT/mame.log 2>&1 || true
 echo "replaying on the ColecoVision build..."
 MRDO_SYM=$PWD/build/mrdo_validate.sym REF=$OUT/ref OUTRAM=$OUT/cv.ram FRAMES=$FRAMES \
   ${OPENMSX:-/Applications/openMSX.app/Contents/MacOS/openmsx} -machine ColecoVision_SGM \

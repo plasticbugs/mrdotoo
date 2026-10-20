@@ -7,9 +7,11 @@ all four arcade flip combinations (the TMS9918 cannot mirror), as 32-byte
 sprite: the shape is every non-black pixel, and the colour is the most common
 non-black colour, for each of the 16 arcade colour lines.
 
-The arcade colour line a code is usually drawn with (counted from the sprite
-queue in the validation recordings) decides which pixels count as black for
-that code's shape.
+The arcade colour line a code is usually drawn with decides which pixels
+count as black for that code's shape. It is counted from the sprite queue in
+the validation recordings (build/diff/s1-s3, MAME, not in git) and kept in
+tools/data/sprite_lines.json, so a fresh clone builds the same ROM;
+`gen_sprites.py --lines` recounts it from the recordings.
 
 Output (build/sprites/):
   pat.bin   512 x 32: pattern for (code << 2 | flipy << 1 | flipx)
@@ -17,6 +19,7 @@ Output (build/sprites/):
   mrdo_white.bin  Mr. Do's white pixels (overlay sprite), see main()
   sheet.png every code, flip 0, in its usual colour line
 """
+import json
 import os
 import sys
 from collections import Counter
@@ -41,7 +44,15 @@ MR_DO_CODES = set(range(0x00, 0x27))   # walk, dig, push, throw, caught, death (
 SCORE_CODES = set(range(0x72, 0x78))
 
 
+LINES = ROOT / "tools" / "data" / "sprite_lines.json"
+
+
 def usual_lines():
+    """code -> the colour line it is usually drawn with (tools/data/sprite_lines.json)."""
+    return {int(k, 16): v for k, v in json.loads(LINES.read_text()).items()}
+
+
+def count_lines():
     """code -> most common colour line in the recorded sprite queues."""
     seen = {}
     for s in (1, 2, 3):
@@ -144,4 +155,10 @@ def main():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--lines"]:
+        lines = count_lines()
+        assert lines, "no recordings in build/diff/s1-s3 (make validate SEED=1..3)"
+        LINES.write_text(json.dumps({"%02x" % c: lines[c] for c in sorted(lines)}, indent=0) + "\n")
+        print(f"{LINES}: {len(lines)} codes")
+        sys.exit()
     main()

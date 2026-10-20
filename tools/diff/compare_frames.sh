@@ -10,8 +10,8 @@ SEED=$1; CAM=$2; shift 2
 LAST=$(for h in "$@"; do echo $h; done | sort -n | tail -1)
 SNAP=$(echo "$@" | tr ' ' ',')
 rm -rf build/frames && mkdir -p build/frames/mame
-SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy OUT=build/frames/rec FRAMES=$((LAST + 2)) SEED=$SEED SNAP=$SNAP \
-  mame mrdo -rompath "$PWD/build/mame_roms" -video none -sound none -nothrottle -skip_gameinfo \
+OUT=build/frames/rec FRAMES=$((LAST + 2)) SEED=$SEED SNAP=$SNAP \
+  tools/mame.sh -seconds_to_run $((LAST / 50 + 120)) \
   -snapshot_directory "$PWD/build/frames/mame" -autoboot_script tools/diff/mame_record.lua > /dev/null 2>&1
 for h in "$@"; do
   MRDO_SYM=$PWD/build/mrdo_validate.sym REF=build/frames/rec OUTRAM=build/frames/cv.ram FRAMES=$((LAST + 10)) \

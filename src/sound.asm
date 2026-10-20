@@ -263,7 +263,7 @@ snd_outloop:
         jr .sl
 .ch:    push bc
         call snd_chout
-        pop bc
+.cr:    pop bc                  ; (tools/sound_check.tcl checks each channel here)
         ld de, 10
         add iy, de
         djnz .sl

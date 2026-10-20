@@ -34,7 +34,7 @@ debug set_bp [symaddr snd_tone] {} {
   set iy [reg iy]; set ::tin [list [reg c] [reg d] [peek [expr {$iy+8}]] [peek [expr {$iy+9}]] [peek [symaddr snd_tvolc]] [peek [symaddr snd_nvol2]]]
   set ::tio {}; set ::tcap 1
 }
-debug set_bp 0x5C12 {$::tcap} { set ::tcap 0; incr ::tn; if {[expect_io {*}$::tin] ne $::tio} { incr ::tbad; incr ::bad; if {[llength $::ex] < 5} { lappend ::ex "snd_tone $::tin: $::tio" } } }
+debug set_bp [symaddr snd_outloop.cr] {$::tcap} { set ::tcap 0; incr ::tn; if {[expect_io {*}$::tin] ne $::tio} { incr ::tbad; incr ::bad; if {[llength $::ex] < 5} { lappend ::ex "snd_tone $::tin: $::tio" } } }
 set ::atn {15 14 14 13 12 12 11 10 10 9 8 8 7 6 6 0}
 proc h2 {v} { format %02x [expr {$v & 0xFF}] }
 proc expect_io {c d i8 i9 tvolc nvol2} {
@@ -63,15 +63,32 @@ proc expect {chipn bytes} {
   return 1
 }
 # snd_chout: remember what the original would write; check after it returns
+# (snd_outloop.cr: the native output loop's return point from snd_chout)
 debug set_bp [symaddr snd_chout] {} {
   set a [reg a]; set iy [reg iy]; set b8 [peek [expr {$iy+8}]]; set b9 [peek [expr {$iy+9}]]
   set d [expr {0x80 | (($a & 6) << 4)}]; set t [expr {$a & 0x38}]
   if {$t >= 0x20 && $t < 0x30} { set ::pend [list [expr {($a & 1) + 1}] [list [expr {$d | $b8}] [expr {$d | $b9 | 0x10}]]] } else { set ::pend [list [expr {($a & 1) + 1}] [list [expr {(($b9 & 0xF0) >> 4) | $d}] $b8 [expr {($b9 & 15) | $d | 0x10}]]] }
 }
-debug set_bp 0x5C12 {} { incr ::checks; if {![expect [lindex $::pend 0] [lindex $::pend 1]]} { incr ::bad; if {[llength $::ex] < 5} { lappend ::ex "chout t=[format %.2f [machine_info time]] $::pend" } } }
-foreach {sym ret n} [list snd_sil1 0x5AEA 1 snd_sil2 0x5AF1 2] {
-  debug set_bp [symaddr $sym] {} "set ::spend \[list $n \[reg a\]\]"
-  debug set_bp $ret {} { incr ::checks; if {![expect [lindex $::spend 0] [list [lindex $::spend 1]]]} { incr ::bad; if {[llength $::ex] < 5} { lappend ::ex "sil $::spend" } } }
+debug set_bp [symaddr snd_outloop.cr] {} { incr ::checks; if {![expect [lindex $::pend 0] [lindex $::pend 1]]} { incr ::bad; if {[llength $::ex] < 5} { lappend ::ex "chout t=[format %.2f [machine_info time]] $::pend" } } }
+# snd_silpass (the tick's silencing pass, native): the original writes a
+# volume-off byte ($9F/$BF/$DF/$FF) to each chip channel whose bit in $EC74
+# is clear (chip 1 bit 7-2k, chip 2 bit 6-2k for channel k). A tone channel
+# it skips (its SND_SIL bit set) must already be silent in the model; then
+# the model takes every byte the original would have written.
+set ::use_a [expr {[symaddr ARC_WORK] + 0xC74}]
+debug set_bp [symaddr snd_silpass] {} {
+  set use [peek $::use_a]; set sil [peek [symaddr SND_SIL]]
+  foreach k {0 1 2 3} {
+    set a [expr {0x9F + 32 * $k}]
+    foreach n {1 2} {
+      if {$use & (1 << ($n == 1 ? 7 - 2 * $k : 6 - 2 * $k))} continue
+      if {$k < 3 && ($sil & (1 << ($n == 1 ? $k : 3 + $k)))} {
+        incr ::checks
+        if {[dict get $::chip($n) v$k] != 15} { incr ::bad; if {[llength $::ex] < 5} { lappend ::ex "sil chip $n ch $k skipped, volume [dict get $::chip($n) v$k]" } }
+      }
+      set ::chip($n) [apply $::chip($n) $a]
+    }
+  }
 }
 set throttle off
 after time 4   { inp 0xff 0xbf }
